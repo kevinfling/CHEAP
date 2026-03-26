@@ -314,6 +314,91 @@ static void test_span_size_mismatch() {
 #endif
 
 /* =========================================================================
+ * Section: Spectral weight constructor tests
+ * ========================================================================= */
+
+static void test_weights_fractional_cpp() {
+    const int n = 64;
+    auto w = cheap::weights_fractional(n, 0.0);
+    ASSERT_EQ(static_cast<int>(w.size()), n);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w[k], 1.0, 1e-12);
+
+    /* Roundtrip */
+    auto wd = cheap::weights_fractional(n, 0.4);
+    auto wi = cheap::weights_fractional(n, -0.4);
+    for (int k = 1; k < n; ++k) ASSERT_NEAR(wd[k] * wi[k], 1.0, 1e-12);
+
+    /* Invalid params throw */
+    ASSERT_THROWS(cheap::weights_fractional(1, 0.5), cheap::Error);
+}
+
+static void test_weights_wiener_cpp() {
+    const int n = 128;
+    auto w = cheap::weights_wiener(n, 1.0);
+    ASSERT_EQ(static_cast<int>(w.size()), n);
+    ASSERT_NEAR(w[0], 0.0, 1e-16);
+    for (int k = 1; k < n; ++k) {
+        ASSERT_TRUE(w[k] >= 0.0);
+        ASSERT_TRUE(w[k] < 1.0);
+    }
+
+    /* _ev matches simple */
+    auto lap = cheap::weights_laplacian(n);
+    auto w_ev = cheap::weights_wiener_ev(n, lap.data(), 1.0);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w[k], w_ev[k], 1e-14);
+}
+
+static void test_weights_specnorm_cpp() {
+    const int n = 64;
+    double eps = 1e-3;
+    auto w = cheap::weights_specnorm(n, eps);
+    ASSERT_EQ(static_cast<int>(w.size()), n);
+    ASSERT_NEAR(w[0], 1.0 / std::sqrt(eps), 1e-10);
+    for (int k = 0; k < n; ++k) ASSERT_TRUE(w[k] > 0.0);
+
+    ASSERT_THROWS(cheap::weights_specnorm(n, 0.0), cheap::Error);
+}
+
+static void test_weights_kpca_soft_cpp() {
+    cheap::Context ctx(64, 0.7);
+    auto w = ctx.weights_kpca_soft(16);
+    ASSERT_EQ(static_cast<int>(w.size()), 64);
+    for (int k = 0; k < 64; ++k) {
+        ASSERT_TRUE(w[k] >= -1e-15);
+        ASSERT_TRUE(w[k] <= 1.0 + 1e-15);
+    }
+    ASSERT_NEAR(w[16], 0.0, 1e-12);
+}
+
+static void test_weights_mandelbrot_cpp() {
+    const int n = 64;
+    auto w = cheap::weights_mandelbrot(n, 0.5);
+    ASSERT_EQ(static_cast<int>(w.size()), n);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w[k], 1.0, 1e-12);
+
+    ASSERT_THROWS(cheap::weights_mandelbrot(n, 0.0), cheap::Error);
+    ASSERT_THROWS(cheap::weights_mandelbrot(n, 1.0), cheap::Error);
+}
+
+static void test_weights_rmt_cpp() {
+    const int n = 16;
+    double sigma_sq = 1.0, c = 0.5;
+    double lp = sigma_sq * (1.0 + std::sqrt(c)) * (1.0 + std::sqrt(c));
+
+    std::vector<double> lam(n);
+    for (int k = 0; k < n / 2; ++k) lam[k] = lp * 0.3;  /* below */
+    for (int k = n / 2; k < n; ++k) lam[k] = lp * 2.0;   /* above */
+
+    auto wh = cheap::weights_rmt_hard(lam.data(), n, sigma_sq, c);
+    ASSERT_EQ(static_cast<int>(wh.size()), n);
+    for (int k = 0; k < n / 2; ++k) ASSERT_NEAR(wh[k], 0.0, 1e-16);
+    for (int k = n / 2; k < n; ++k) ASSERT_TRUE(wh[k] > 0.0);
+
+    auto ws = cheap::weights_rmt_shrink(lam.data(), n, sigma_sq, c);
+    for (int k = 0; k < n / 2; ++k) ASSERT_NEAR(ws[k], 0.0, 1e-16);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 
@@ -342,6 +427,14 @@ int main() {
     RUN_TEST(test_span_forward_inverse);
     RUN_TEST(test_span_size_mismatch);
 #endif
+
+    std::fprintf(stderr, "\n  --- spectral weight constructors ---\n");
+    RUN_TEST(test_weights_fractional_cpp);
+    RUN_TEST(test_weights_wiener_cpp);
+    RUN_TEST(test_weights_specnorm_cpp);
+    RUN_TEST(test_weights_kpca_soft_cpp);
+    RUN_TEST(test_weights_mandelbrot_cpp);
+    RUN_TEST(test_weights_rmt_cpp);
 
     std::fprintf(stderr, "\n%d tests, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed ? 1 : 0;

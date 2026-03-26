@@ -249,6 +249,18 @@ public:
     }
 #endif
 
+    /* --- Spectral weight constructors (ctx-dependent) --- */
+
+    std::vector<double> weights_kpca_soft(int K) const {
+        std::vector<double> w(static_cast<std::size_t>(ctx_.n));
+        detail::check(cheap_weights_kpca_soft(&ctx_, K, w.data()));
+        return w;
+    }
+
+    void weights_kpca_soft(int K, double* out) const {
+        detail::check(cheap_weights_kpca_soft(&ctx_, K, out));
+    }
+
     /* --- Accessors --- */
 
     int n() const noexcept { return ctx_.n; }
@@ -371,6 +383,74 @@ public:
 private:
     cheap_rff_ctx rctx_{};
 };
+
+/* ============================================================
+ * Spectral weight constructors (free functions)
+ * ============================================================ */
+
+inline std::vector<double> weights_laplacian(int n) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_laplacian(n, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_fractional(int n, double d) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_fractional(n, d, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_kpca_hard(int n, int K) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_kpca_hard(n, K, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_wiener(int n, double sigma_sq) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_wiener(n, sigma_sq, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_wiener_ev(int n, const double* lambda,
+                                               double sigma_sq) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_wiener_ev(n, lambda, sigma_sq, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_specnorm(int n, double eps) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_specnorm(n, eps, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_specnorm_ev(int n, const double* lambda,
+                                                 double eps) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_specnorm_ev(n, lambda, eps, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_mandelbrot(int n, double H) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_mandelbrot(n, H, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_rmt_hard(const double* lambda, int n,
+                                              double sigma_sq, double c) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_rmt_hard(lambda, n, sigma_sq, c, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_rmt_shrink(const double* lambda, int n,
+                                                double sigma_sq, double c) {
+    std::vector<double> w(static_cast<std::size_t>(n));
+    detail::check(cheap_weights_rmt_shrink(lambda, n, sigma_sq, c, w.data()));
+    return w;
+}
 
 /* ============================================================
  * Free functions

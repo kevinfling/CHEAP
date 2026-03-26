@@ -279,6 +279,96 @@ static void run_rff_benchmarks(void)
 }
 
 /* =========================================================================
+ * Spectral weight constructor benchmarks
+ * ========================================================================= */
+
+typedef struct { int n; double* w; } weight_state;
+
+static void bench_weights_fractional(void *p) {
+    weight_state *s = (weight_state *)p;
+    cheap_weights_fractional(s->n, 0.4, s->w);
+}
+static void bench_weights_wiener(void *p) {
+    weight_state *s = (weight_state *)p;
+    cheap_weights_wiener(s->n, 1.0, s->w);
+}
+static void bench_weights_specnorm(void *p) {
+    weight_state *s = (weight_state *)p;
+    cheap_weights_specnorm(s->n, 1e-3, s->w);
+}
+static void bench_weights_mandelbrot(void *p) {
+    weight_state *s = (weight_state *)p;
+    cheap_weights_mandelbrot(s->n, 0.7, s->w);
+}
+static void bench_weights_rmt_shrink(void *p) {
+    weight_state *s = (weight_state *)p;
+    cheap_weights_rmt_shrink(s->w, s->n, 1.0, 0.5, s->w);
+}
+
+static void run_weight_benchmarks(int n)
+{
+    weight_state *s = (weight_state *)malloc(sizeof(*s));
+    s->n = n;
+    s->w = (double *)fftw_malloc((size_t)n * sizeof(double));
+    /* Fill with dummy eigenvalues for RMT */
+    for (int i = 0; i < n; ++i)
+        s->w[i] = 1.0 + 5.0 * (double)i / (double)n;
+
+    double wms; uint64_t tk;
+
+    run_bench(bench_weights_fractional, s, &wms, &tk);
+    print_result("wt_fractional", n, wms, tk);
+
+    run_bench(bench_weights_wiener, s, &wms, &tk);
+    print_result("wt_wiener", n, wms, tk);
+
+    run_bench(bench_weights_specnorm, s, &wms, &tk);
+    print_result("wt_specnorm", n, wms, tk);
+
+    run_bench(bench_weights_mandelbrot, s, &wms, &tk);
+    print_result("wt_mandelbrot", n, wms, tk);
+
+    /* Re-fill for RMT (needs eigenvalues above threshold) */
+    double sc = sqrt(0.5);
+    double lp = (1.0 + sc) * (1.0 + sc);
+    for (int i = 0; i < n; ++i)
+        s->w[i] = lp + 1.0 + 5.0 * (double)i / (double)n;
+    run_bench(bench_weights_rmt_shrink, s, &wms, &tk);
+    print_result("wt_rmt_shrink", n, wms, tk);
+
+    fftw_free(s->w);
+    free(s);
+}
+
+/* End-to-end: weight computation + apply */
+typedef struct { cheap_ctx ctx; double *input; double *weights; double *output; int n; } apply_wt_state;
+static void bench_apply_wiener(void *p) {
+    apply_wt_state *s = (apply_wt_state *)p;
+    cheap_weights_wiener(s->n, 1.0, s->weights);
+    cheap_apply(&s->ctx, s->input, s->weights, s->output);
+}
+
+static void run_apply_weight_benchmarks(int n)
+{
+    apply_wt_state *s = (apply_wt_state *)malloc(sizeof(*s));
+    cheap_init(&s->ctx, n, 0.7);
+    s->n = n;
+    s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
+    s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
+    s->output  = (double *)fftw_malloc((size_t)n * sizeof(double));
+    for (int i = 0; i < n; ++i)
+        s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
+
+    double wms; uint64_t tk;
+    run_bench(bench_apply_wiener, s, &wms, &tk);
+    print_result("apply_wiener_e2e", n, wms, tk);
+
+    cheap_destroy(&s->ctx);
+    fftw_free(s->input); fftw_free(s->weights); fftw_free(s->output);
+    free(s);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 int main(void)
@@ -299,6 +389,14 @@ int main(void)
 
     /* RFF */
     run_rff_benchmarks();
+
+    /* Spectral weight constructors */
+    for (int i = 0; i < nsizes; ++i)
+        run_weight_benchmarks(sizes[i]);
+
+    /* End-to-end apply with weight computation */
+    for (int i = 0; i < nsizes; ++i)
+        run_apply_weight_benchmarks(sizes[i]);
 
     return 0;
 }

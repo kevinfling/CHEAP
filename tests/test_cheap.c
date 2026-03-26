@@ -703,6 +703,337 @@ static void test_edge_cases(void)
 }
 
 /* =========================================================================
+ * Section 7: Spectral weight constructor tests
+ * ========================================================================= */
+
+static void test_weights_laplacian(void)
+{
+    printf("  test_weights_laplacian\n");
+    const int n = 4;
+    double w[4];
+    ASSERT_EQ(cheap_weights_laplacian(n, w), CHEAP_OK);
+
+    /* DC = 0 exactly */
+    ASSERT_NEAR(w[0], 0.0, 1e-16);
+
+    /* Known values: 4*sin^2(pi*k/8) for k=0..3 */
+    ASSERT_NEAR(w[1], 4.0 * sin(M_PI / 8.0) * sin(M_PI / 8.0), 1e-14);
+    ASSERT_NEAR(w[2], 4.0 * sin(M_PI / 4.0) * sin(M_PI / 4.0), 1e-14);
+    ASSERT_NEAR(w[3], 4.0 * sin(3.0 * M_PI / 8.0) * sin(3.0 * M_PI / 8.0), 1e-14);
+
+    /* Monotonically increasing for n=128 */
+    {
+        const int nn = 128;
+        double *big = (double *)malloc((size_t)nn * sizeof(double));
+        ASSERT_EQ(cheap_weights_laplacian(nn, big), CHEAP_OK);
+        ASSERT_NEAR(big[0], 0.0, 1e-16);
+        for (int k = 1; k < nn - 1; ++k)
+            ASSERT_TRUE(big[k + 1] > big[k] - 1e-14);
+        /* Approaches but never reaches 4 */
+        ASSERT_TRUE(big[nn - 1] < 4.0);
+        ASSERT_TRUE(big[nn - 1] > 3.9);
+        free(big);
+    }
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_laplacian(1, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_laplacian(4, NULL), CHEAP_EINVAL);
+}
+
+static void test_weights_fractional(void)
+{
+    printf("  test_weights_fractional\n");
+    const int n = 128;
+    double *w_diff = (double *)malloc((size_t)n * sizeof(double));
+    double *w_int  = (double *)malloc((size_t)n * sizeof(double));
+
+    /* Roundtrip: diff(d) * int(-d) = identity for k > 0 */
+    const double d = 0.3;
+    ASSERT_EQ(cheap_weights_fractional(n, d, w_diff), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_fractional(n, -d, w_int), CHEAP_OK);
+    for (int k = 1; k < n; ++k)
+        ASSERT_NEAR(w_diff[k] * w_int[k], 1.0, 1e-12);
+
+    /* d=0 → all 1s */
+    ASSERT_EQ(cheap_weights_fractional(n, 0.0, w_diff), CHEAP_OK);
+    for (int k = 0; k < n; ++k)
+        ASSERT_NEAR(w_diff[k], 1.0, 1e-12);
+
+    /* DC clamping: k=0 should not be infinity */
+    ASSERT_EQ(cheap_weights_fractional(n, -0.5, w_diff), CHEAP_OK);
+    ASSERT_TRUE(isfinite(w_diff[0]));
+    ASSERT_TRUE(w_diff[0] > 0.0);
+
+    /* Match manual pattern from test_apply_fractional_roundtrip */
+    ASSERT_EQ(cheap_weights_fractional(n, d, w_diff), CHEAP_OK);
+    for (int k = 0; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        if (s < CHEAP_EPS_LOG) s = CHEAP_EPS_LOG;
+        ASSERT_NEAR(w_diff[k], pow(2.0 * s, d), 1e-15);
+    }
+
+    /* Error cases */
+    double nan_val = (double)NAN;
+    ASSERT_EQ(cheap_weights_fractional(1, 0.5, w_diff), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional(n, nan_val, w_diff), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional(n, 0.5, NULL), CHEAP_EINVAL);
+
+    free(w_diff); free(w_int);
+}
+
+static void test_weights_kpca_hard(void)
+{
+    printf("  test_weights_kpca_hard\n");
+    const int n = 16;
+    double w[16];
+
+    /* K=4: first 4 are 1, rest 0 */
+    ASSERT_EQ(cheap_weights_kpca_hard(n, 4, w), CHEAP_OK);
+    for (int k = 0; k < 4; ++k) ASSERT_NEAR(w[k], 1.0, 1e-16);
+    for (int k = 4; k < n; ++k) ASSERT_NEAR(w[k], 0.0, 1e-16);
+
+    /* K=0: all zeros */
+    ASSERT_EQ(cheap_weights_kpca_hard(n, 0, w), CHEAP_OK);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w[k], 0.0, 1e-16);
+
+    /* K=n: all ones */
+    ASSERT_EQ(cheap_weights_kpca_hard(n, n, w), CHEAP_OK);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w[k], 1.0, 1e-16);
+
+    /* Idempotency: apply twice = apply once */
+    cheap_ctx ctx;
+    ASSERT_EQ(cheap_init(&ctx, 64, 0.5), CHEAP_OK);
+    double *x = (double *)malloc(64 * sizeof(double));
+    double *y1 = (double *)malloc(64 * sizeof(double));
+    double *y2 = (double *)malloc(64 * sizeof(double));
+    double *ww = (double *)malloc(64 * sizeof(double));
+    for (int i = 0; i < 64; ++i) x[i] = sin(2.0 * M_PI * i / 64.0);
+    ASSERT_EQ(cheap_weights_kpca_hard(64, 8, ww), CHEAP_OK);
+    ASSERT_EQ(cheap_apply(&ctx, x, ww, y1), CHEAP_OK);
+    ASSERT_EQ(cheap_apply(&ctx, y1, ww, y2), CHEAP_OK);
+    for (int i = 0; i < 64; ++i) ASSERT_NEAR(y1[i], y2[i], 1e-12);
+    free(x); free(y1); free(y2); free(ww);
+    cheap_destroy(&ctx);
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_kpca_hard(n, -1, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_kpca_hard(n, n + 1, w), CHEAP_EINVAL);
+}
+
+static void test_weights_kpca_soft(void)
+{
+    printf("  test_weights_kpca_soft\n");
+    cheap_ctx ctx;
+    ASSERT_EQ(cheap_init(&ctx, 64, 0.7), CHEAP_OK);
+    double *w = (double *)malloc(64 * sizeof(double));
+
+    ASSERT_EQ(cheap_weights_kpca_soft(&ctx, 16, w), CHEAP_OK);
+
+    /* All weights in [0, 1] */
+    for (int k = 0; k < 64; ++k) {
+        ASSERT_TRUE(w[k] >= -1e-15);
+        ASSERT_TRUE(w[k] <= 1.0 + 1e-15);
+    }
+
+    /* Low-k (large eigenvalue) components should have higher weights */
+    /* Flandrin eigenvalues decrease with k, so w[1] should be >= w[16] */
+    ASSERT_TRUE(w[1] >= w[16] - 1e-12);
+
+    /* At k=K, weight should be ~0 (lambda[K]/lambda[K] = 1, so 1-1=0) */
+    ASSERT_NEAR(w[16], 0.0, 1e-12);
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_kpca_soft(NULL, 16, w), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_weights_kpca_soft(&ctx, -1, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_kpca_soft(&ctx, 64, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_kpca_soft(&ctx, 16, NULL), CHEAP_EINVAL);
+
+    free(w);
+    cheap_destroy(&ctx);
+}
+
+static void test_weights_wiener(void)
+{
+    printf("  test_weights_wiener\n");
+    const int n = 128;
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+
+    ASSERT_EQ(cheap_weights_wiener(n, 1.0, w), CHEAP_OK);
+
+    /* DC = 0 */
+    ASSERT_NEAR(w[0], 0.0, 1e-16);
+
+    /* Range [0, 1) */
+    for (int k = 0; k < n; ++k) {
+        ASSERT_TRUE(w[k] >= -1e-16);
+        ASSERT_TRUE(w[k] < 1.0);
+    }
+
+    /* Monotonically non-decreasing */
+    for (int k = 1; k < n - 1; ++k)
+        ASSERT_TRUE(w[k + 1] >= w[k] - 1e-14);
+
+    /* Large sigma_sq → all ~0 */
+    ASSERT_EQ(cheap_weights_wiener(n, 1e6, w), CHEAP_OK);
+    for (int k = 0; k < n; ++k) ASSERT_TRUE(w[k] < 0.01);
+
+    /* Small sigma_sq → all ~1 for k > 0 */
+    ASSERT_EQ(cheap_weights_wiener(n, 1e-10, w), CHEAP_OK);
+    for (int k = 1; k < n; ++k) ASSERT_TRUE(w[k] > 0.99);
+
+    /* _ev variant matches simple variant */
+    double *lap = (double *)malloc((size_t)n * sizeof(double));
+    double *w_ev = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian(n, lap), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_wiener(n, 1.0, w), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_wiener_ev(n, lap, 1.0, w_ev), CHEAP_OK);
+    for (int k = 0; k < n; ++k)
+        ASSERT_NEAR(w[k], w_ev[k], 1e-14);
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_wiener(1, 1.0, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_wiener(n, 0.0, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_wiener(n, -1.0, w), CHEAP_EINVAL);
+
+    free(w); free(lap); free(w_ev);
+}
+
+static void test_weights_specnorm(void)
+{
+    printf("  test_weights_specnorm\n");
+    const int n = 64;
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+    const double eps = 1e-3;
+
+    ASSERT_EQ(cheap_weights_specnorm(n, eps, w), CHEAP_OK);
+
+    /* All positive */
+    for (int k = 0; k < n; ++k) ASSERT_TRUE(w[k] > 0.0);
+
+    /* DC = 1/sqrt(eps) */
+    ASSERT_NEAR(w[0], 1.0 / sqrt(eps), 1e-10);
+
+    /* Decreasing in k (Laplacian eigenvalues increase) */
+    for (int k = 0; k < n - 1; ++k)
+        ASSERT_TRUE(w[k] >= w[k + 1] - 1e-14);
+
+    /* _ev matches simple */
+    double *lap = (double *)malloc((size_t)n * sizeof(double));
+    double *w_ev = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian(n, lap), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_specnorm_ev(n, lap, eps, w_ev), CHEAP_OK);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w[k], w_ev[k], 1e-14);
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_specnorm(n, 0.0, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_specnorm(n, -1.0, w), CHEAP_EINVAL);
+
+    free(w); free(lap); free(w_ev);
+}
+
+static void test_weights_mandelbrot(void)
+{
+    printf("  test_weights_mandelbrot\n");
+    const int n = 64;
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+
+    /* H = 0.5 → all weights = 1.0 (symmetry: Gamma(0.5+it)/Gamma(0.5+it)) */
+    ASSERT_EQ(cheap_weights_mandelbrot(n, 0.5, w), CHEAP_OK);
+    for (int k = 0; k < n; ++k)
+        ASSERT_NEAR(w[k], 1.0, 1e-12);
+
+    /* DC (k=0) matches real lgamma */
+    double H = 0.7;
+    ASSERT_EQ(cheap_weights_mandelbrot(n, H, w), CHEAP_OK);
+    double expected_dc = exp(lgamma(H) - lgamma(1.0 - H));
+    ASSERT_NEAR(w[0], expected_dc, 1e-12);
+
+    /* All finite and positive for various H */
+    double H_vals[] = {0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99};
+    for (int hi = 0; hi < 7; ++hi) {
+        ASSERT_EQ(cheap_weights_mandelbrot(n, H_vals[hi], w), CHEAP_OK);
+        for (int k = 0; k < n; ++k) {
+            ASSERT_TRUE(isfinite(w[k]));
+            ASSERT_TRUE(w[k] > 0.0);
+        }
+    }
+
+    /* Lanczos accuracy: lnGamma(1) = 0 */
+    {
+        double re, im;
+        cheap__clgamma(1.0, 0.0, &re, &im);
+        ASSERT_NEAR(re, 0.0, 1e-12);
+        ASSERT_NEAR(im, 0.0, 1e-12);
+    }
+    /* lnGamma(0.5) = ln(sqrt(pi)) */
+    {
+        double re, im;
+        cheap__clgamma(0.5, 0.0, &re, &im);
+        ASSERT_NEAR(re, 0.5 * log(M_PI), 1e-12);
+    }
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_mandelbrot(n, 0.0, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_mandelbrot(n, 1.0, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_mandelbrot(1, 0.5, w), CHEAP_EINVAL);
+
+    free(w);
+}
+
+static void test_weights_rmt(void)
+{
+    printf("  test_weights_rmt\n");
+    const int n = 32;
+    double sigma_sq = 1.0;
+    double c = 0.5;  /* N/p = 0.5 */
+    double lambda_plus = sigma_sq * (1.0 + sqrt(c)) * (1.0 + sqrt(c));
+
+    /* Create eigenvalues: half below threshold, half above */
+    double *lam = (double *)malloc((size_t)n * sizeof(double));
+    for (int k = 0; k < n / 2; ++k)
+        lam[k] = lambda_plus * 0.5 * (double)(k + 1) / (double)(n / 2); /* below */
+    for (int k = n / 2; k < n; ++k)
+        lam[k] = lambda_plus * (1.0 + (double)(k - n / 2 + 1)); /* above */
+
+    double *w_hard = (double *)malloc((size_t)n * sizeof(double));
+    double *w_shrink = (double *)malloc((size_t)n * sizeof(double));
+
+    /* Hard threshold */
+    ASSERT_EQ(cheap_weights_rmt_hard(lam, n, sigma_sq, c, w_hard), CHEAP_OK);
+    for (int k = 0; k < n / 2; ++k)
+        ASSERT_NEAR(w_hard[k], 0.0, 1e-16);  /* below threshold → 0 */
+    for (int k = n / 2; k < n; ++k) {
+        ASSERT_NEAR(w_hard[k], lam[k], 1e-14);  /* above → passthrough */
+        ASSERT_TRUE(w_hard[k] > 0.0);
+    }
+
+    /* All-noise → all zeros */
+    double *lam_noise = (double *)malloc((size_t)n * sizeof(double));
+    for (int k = 0; k < n; ++k) lam_noise[k] = lambda_plus * 0.5;
+    ASSERT_EQ(cheap_weights_rmt_hard(lam_noise, n, sigma_sq, c, w_hard), CHEAP_OK);
+    for (int k = 0; k < n; ++k) ASSERT_NEAR(w_hard[k], 0.0, 1e-16);
+
+    /* Shrinkage */
+    ASSERT_EQ(cheap_weights_rmt_hard(lam, n, sigma_sq, c, w_hard), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_rmt_shrink(lam, n, sigma_sq, c, w_shrink), CHEAP_OK);
+    for (int k = 0; k < n / 2; ++k)
+        ASSERT_NEAR(w_shrink[k], 0.0, 1e-16);  /* below threshold → 0 */
+    for (int k = n / 2; k < n; ++k) {
+        ASSERT_TRUE(w_shrink[k] >= 0.0);
+        ASSERT_TRUE(isfinite(w_shrink[k]));
+        /* Shrinkage is strictly less than the raw eigenvalue for finite signal */
+        ASSERT_TRUE(w_shrink[k] < lam[k] + 1e-12);
+    }
+
+    /* Error cases */
+    ASSERT_EQ(cheap_weights_rmt_hard(NULL, n, 1.0, 0.5, w_hard), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_rmt_hard(lam, n, 0.0, 0.5, w_hard), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_rmt_hard(lam, n, 1.0, 0.0, w_hard), CHEAP_EINVAL);
+
+    free(lam); free(lam_noise); free(w_hard); free(w_shrink);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 int main(void)
@@ -739,6 +1070,16 @@ int main(void)
 
     /* Edge cases */
     test_edge_cases();
+
+    /* Spectral weight constructors */
+    test_weights_laplacian();
+    test_weights_fractional();
+    test_weights_kpca_hard();
+    test_weights_kpca_soft();
+    test_weights_wiener();
+    test_weights_specnorm();
+    test_weights_mandelbrot();
+    test_weights_rmt();
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return (g_tests_failed > 0) ? 1 : 0;

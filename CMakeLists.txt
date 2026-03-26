@@ -114,6 +114,8 @@ set(CHEAP_EXAMPLES_C
     poisson_solver
     ns_dissipation
     online_filter
+    wiener_denoise
+    rmt_denoise
 )
 
 foreach(example ${CHEAP_EXAMPLES_C})
@@ -163,6 +165,8 @@ if(CHEAP_BUILD_CPP)
         poisson_solver
         ns_dissipation
         online_filter
+        wiener_denoise
+        rmt_denoise
     )
 
     foreach(example ${CHEAP_EXAMPLES_CPP})

@@ -1,10 +1,10 @@
 # CHEAP
 
-**Circulant Hessian Efficient Algorithm Package** — a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices.
+**Circulant Hessian Efficient Algorithm Package:** a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices.
 
-CHEAP turns cubic-time kernel methods into fast spectral operations by exploiting the fact that stationary covariance matrices (Toeplitz) diagonalizes in the DCT-II basis. One forward DCT, one pointwise multiply, one inverse DCT — that's the entire algorithm for kernel regression, optimal transport, Gaussian sampling, control, and fractional calculus.
+CHEAP turns cubic-time kernel methods into fast spectral operations by exploiting the fact that stationary covariance matrices (Toeplitz) diagonalizes in the DCT-II basis. One forward DCT, one pointwise multiply, one inverse DCT: that's the entire algorithm for kernel regression, optimal transport, Gaussian sampling, control, and fractional calculus.
 
-On N=65,536 problems, CHEAP delivers 400--1000x speedups over Cholesky/LAPACK baselines using O(N) memory.
+On N=65,536 problems, CHEAP delivers 400-1000x speedups over Cholesky/LAPACK baselines using O(N) memory.
 
 ## How It Works
 
@@ -25,6 +25,11 @@ The choice of weight vector determines the operation:
 | Fractional differentiation | `(2 sin(w_k/2))^d` | O(N log N) |
 | Toeplitz matvec / solve | `DCT(first_col)[k]` | O(N log N) |
 | Kalman prediction | `P[k] + lambda[k]` | O(N) |
+| Wiener filter | `lk / (lk + sigma^2)` | O(N log N) |
+| Spectral normalization | `1 / sqrt(lk + eps)` | O(N log N) |
+| Kernel PCA (hard/soft) | `I(k < K)` / soft variant | O(N log N) |
+| Mandelbrot multifractal | `abs(Gamma(H+it)/Gamma(1-H+it))` | O(N log N) |
+| RMT denoising | Marchenko-Pastur threshold | O(N log N) |
 
 The eigenvalues `lambda[k]` come from Flandrin's wavelet variance formula for fractional Brownian motion, precomputed once during `cheap_init`. See [CHEAP.md](CHEAP.md) for the full mathematical treatment.
 
@@ -106,7 +111,7 @@ cheap_destroy(&ctx);
 
 ### Toeplitz System Solve
 
-Solve a regularised Toeplitz system `(T + lambda*I)x = y` for any symmetric Toeplitz matrix:
+Solve a regularized Toeplitz system `(T + lambda*I)x = y` for any symmetric Toeplitz matrix:
 
 ```c
 cheap_ctx ctx;
@@ -123,7 +128,7 @@ cheap_toeplitz_solve_precomp(&ctx, lam, y, /*reg=*/1e-4, x);
 cheap_destroy(&ctx);
 ```
 
-More examples in [`examples/`](examples/): GP regression, optimal transport, LQR/MPC control, fractional calculus, Poisson solver, Navier-Stokes dissipation, online kernel filtering.
+More examples in [`examples/`](examples/): GP regression, optimal transport, LQR/MPC control, fractional calculus, Poisson solver, Navier-Stokes dissipation, online kernel filtering, Wiener denoising, RMT denoising.
 
 ## API Overview
 
@@ -140,6 +145,15 @@ The API has three layers:
 - `cheap_sinkhorn` — entropic optimal transport
 - `cheap_toeplitz_eigenvalues` / `cheap_toeplitz_solve_precomp` — generic Toeplitz operations
 - `cheap_rff_init` / `cheap_rff_map` — random Fourier features for kernel approximation
+
+**4. Spectral weight constructors** — compute weight vectors for `cheap_apply`:
+- `cheap_weights_fractional` — fractional integration/differentiation
+- `cheap_weights_wiener` / `cheap_weights_wiener_ev` — Wiener filter (Laplacian or custom eigenvalues)
+- `cheap_weights_specnorm` / `cheap_weights_specnorm_ev` — spectral normalization / whitening
+- `cheap_weights_kpca_hard` / `cheap_weights_kpca_soft` — kernel PCA projection
+- `cheap_weights_mandelbrot` — Mandelbrot multifractal weights (complex Gamma ratio)
+- `cheap_weights_rmt_hard` / `cheap_weights_rmt_shrink` — RMT denoising (Marchenko-Pastur)
+- `cheap_weights_laplacian` — discrete Laplacian eigenvalues
 
 The C++ wrapper (`cheap.hpp`) provides RAII via `cheap::Context` and `cheap::RffContext`, with exception-based error handling and optional `std::span` overloads in C++20.
 
@@ -177,8 +191,8 @@ C++ targets are built by default. Disable with `-DCHEAP_BUILD_CPP=OFF`.
 
 | Platform | Status |
 |----------|--------|
-| x86 / x86_64 | Supported (auto-vectorised with `-march=native`) |
-| ARM64 / AArch64 | Supported (primary dev target, auto-vectorised) |
+| x86 / x86_64 | Supported (auto-vectorized with `-march=native`) |
+| ARM64 / AArch64 | Supported (primary dev target, auto-vectorized) |
 | Any C99 target | Portable (no platform-specific code in hot paths) |
 
 ## Benchmarks
@@ -223,7 +237,7 @@ Run benchmarks:
 
 ```
 include/
-  cheap.h        — C99 header (~460 lines, entire implementation)
+  cheap.h        — C99 header (~750 lines, entire implementation)
   cheap.hpp      — C++17 RAII wrapper
 tests/
   test_cheap.c   — C test suite
@@ -235,11 +249,13 @@ examples/
   c/             — C99 examples
     gp_regression.c, optimal_transport.c, lqr_mpc.c,
     fractional_diff.c, poisson_solver.c, ns_dissipation.c,
-    toeplitz_solve.c, online_filter.c
+    toeplitz_solve.c, online_filter.c, wiener_denoise.c,
+    rmt_denoise.c
   cpp/           — C++17 equivalents
     gp_regression.cpp, optimal_transport.cpp, lqr_mpc.cpp,
     fractional_diff.cpp, poisson_solver.cpp, ns_dissipation.cpp,
-    toeplitz_solve.cpp, online_filter.cpp
+    toeplitz_solve.cpp, online_filter.cpp, wiener_denoise.cpp,
+    rmt_denoise.cpp
 ```
 
 ## When to Use CHEAP

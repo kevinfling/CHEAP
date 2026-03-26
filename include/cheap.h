@@ -362,6 +362,384 @@ static inline double cheap__lcg_normal(cheap__rng* rng)
 }
 
 /* ============================================================
+ * Spectral weight constructors
+ *
+ * These functions compute weight vectors for use with cheap_apply().
+ * Two eigenvalue families appear in CHEAP:
+ *
+ *   Flandrin:   ctx->lambda[k] = N^{2H} * sin(pi*k/(2N))^{-(2H+1)}
+ *               Decreasing in k. Used for fBm covariance approximation.
+ *
+ *   Laplacian:  lambda_k = 4 * sin^2(pi*k/(2N))
+ *               Increasing in k. Zero at DC. Diagonalizes discrete
+ *               Laplacian with Neumann BCs.
+ *
+ * Each function documents which family it uses or expects.
+ * ============================================================ */
+
+/*
+ * cheap_weights_laplacian — Compute discrete Laplacian eigenvalues.
+ *
+ *   lambda_out[k] = 4 * sin^2(pi*k / (2*n)),   k = 0, ..., n-1
+ *
+ * These are the eigenvalues of the Neumann-BC discrete Laplacian.
+ * lambda_out[0] = 0 exactly (DC component).
+ * Does NOT require a cheap_ctx.
+ */
+static inline int cheap_weights_laplacian(int n, double* lambda_out)
+{
+    if (n < 2 || !lambda_out) return CHEAP_EINVAL;
+    lambda_out[0] = 0.0;
+    for (int k = 1; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        lambda_out[k] = 4.0 * s * s;
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_fractional — Fractional integration/differentiation weights.
+ *
+ *   weights_out[k] = (2 * sin(pi*k/(2*n)))^d
+ *
+ * d > 0: fractional differentiation.  d < 0: fractional integration.
+ * d = 0: identity (all weights = 1).
+ * DC (k=0) sin argument is clamped to CHEAP_EPS_LOG before pow.
+ * Does NOT require a cheap_ctx.
+ */
+static inline int cheap_weights_fractional(int n, double d, double* weights_out)
+{
+    if (n < 2 || !weights_out || !isfinite(d)) return CHEAP_EINVAL;
+    for (int k = 0; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        if (s < CHEAP_EPS_LOG) s = CHEAP_EPS_LOG;
+        weights_out[k] = pow(2.0 * s, d);
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_kpca_hard — Hard spectral truncation (Kernel PCA).
+ *
+ *   weights_out[k] = (k < K) ? 1.0 : 0.0
+ *
+ * Retains the first K spectral components exactly.
+ * K=0 zeroes everything; K=n is the identity.
+ */
+static inline int cheap_weights_kpca_hard(int n, int K, double* weights_out)
+{
+    if (n < 2 || K < 0 || K > n || !weights_out) return CHEAP_EINVAL;
+    for (int k = 0; k < K; ++k) weights_out[k] = 1.0;
+    for (int k = K; k < n; ++k) weights_out[k] = 0.0;
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_kpca_soft — Soft spectral threshold (Kernel PCA).
+ *
+ *   weights_out[k] = max(0, 1 - lambda[K] / lambda[k])
+ *
+ * Uses Flandrin eigenvalues from ctx->lambda (decreasing in k).
+ * Components with lambda[k] >> lambda[K] get weight ~1;
+ * components with lambda[k] ~ lambda[K] get weight ~0.
+ * Retains low-frequency (high-variance) components, consistent with PCA.
+ */
+static inline int cheap_weights_kpca_soft(const cheap_ctx* ctx, int K,
+                                            double* weights_out)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (K < 0 || K >= ctx->n || !weights_out) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double threshold = ctx->lambda[K];
+    for (int k = 0; k < n; ++k) {
+        if (ctx->lambda[k] < CHEAP_EPS_LAMBDA)
+            weights_out[k] = 0.0;
+        else
+            weights_out[k] = fmax(0.0, 1.0 - threshold / ctx->lambda[k]);
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_wiener — Wiener filter weights (Laplacian eigenvalues).
+ *
+ *   weights_out[k] = lambda_k / (lambda_k + sigma_sq)
+ *
+ * where lambda_k = 4*sin^2(pi*k/(2*n)) are Laplacian eigenvalues.
+ * DC (k=0): weight = 0 (zero signal power at DC).
+ * All weights in [0, 1), monotonically non-decreasing in k.
+ */
+static inline int cheap_weights_wiener(int n, double sigma_sq,
+                                         double* weights_out)
+{
+    if (n < 2 || sigma_sq <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    weights_out[0] = 0.0;
+    for (int k = 1; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        double lk = 4.0 * s * s;
+        weights_out[k] = lk / (lk + sigma_sq);
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_wiener_ev — Wiener filter with user-provided eigenvalues.
+ *
+ *   weights_out[k] = lambda[k] / (lambda[k] + sigma_sq)
+ *
+ * Caller provides eigenvalues (Flandrin, Laplacian, or empirical).
+ */
+static inline int cheap_weights_wiener_ev(int n, const double* lambda,
+                                            double sigma_sq,
+                                            double* weights_out)
+{
+    if (n < 2 || !lambda || sigma_sq <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int k = 0; k < n; ++k) {
+        if (!isfinite(lambda[k])) return CHEAP_EDOM;
+        double lk = fmax(lambda[k], 0.0);
+        weights_out[k] = lk / (lk + sigma_sq);
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_specnorm — Spectral normalization (Laplacian eigenvalues).
+ *
+ *   weights_out[k] = 1 / sqrt(lambda_k + eps)
+ *
+ * where lambda_k = 4*sin^2(pi*k/(2*n)). Implements covariance whitening
+ * for operators diagonalized by the DCT. eps > 0 prevents singularity.
+ * DC (k=0): weight = 1/sqrt(eps).
+ */
+static inline int cheap_weights_specnorm(int n, double eps,
+                                           double* weights_out)
+{
+    if (n < 2 || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    weights_out[0] = 1.0 / sqrt(eps);
+    for (int k = 1; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        double lk = 4.0 * s * s;
+        weights_out[k] = 1.0 / sqrt(lk + eps);
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_specnorm_ev — Spectral normalization with user eigenvalues.
+ *
+ *   weights_out[k] = 1 / sqrt(lambda[k] + eps)
+ */
+static inline int cheap_weights_specnorm_ev(int n, const double* lambda,
+                                              double eps,
+                                              double* weights_out)
+{
+    if (n < 2 || !lambda || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int k = 0; k < n; ++k) {
+        if (!isfinite(lambda[k])) return CHEAP_EDOM;
+        double lk = fmax(lambda[k], 0.0);
+        weights_out[k] = 1.0 / sqrt(lk + eps);
+    }
+    return CHEAP_OK;
+}
+
+/* ============================================================
+ * Mandelbrot spectral weight — complex Gamma ratio
+ *
+ * Private helper: Lanczos approximation for complex log-Gamma.
+ * Uses g=7, N=9 Godfrey coefficients for ~15-digit accuracy.
+ * ============================================================ */
+
+static inline void cheap__cmul(double ar, double ai, double br, double bi,
+                                 double* cr, double* ci)
+{
+    *cr = ar * br - ai * bi;
+    *ci = ar * bi + ai * br;
+}
+
+static inline void cheap__cdiv(double ar, double ai, double br, double bi,
+                                 double* cr, double* ci)
+{
+    double d = br * br + bi * bi;
+    if (d < CHEAP_EPS_DIV) d = CHEAP_EPS_DIV;
+    *cr = (ar * br + ai * bi) / d;
+    *ci = (ai * br - ar * bi) / d;
+}
+
+static inline void cheap__clog(double ar, double ai,
+                                 double* cr, double* ci)
+{
+    double mag = sqrt(ar * ar + ai * ai);
+    if (mag < CHEAP_EPS_DIV) mag = CHEAP_EPS_DIV;
+    *cr = log(mag);
+    *ci = atan2(ai, ar);
+}
+
+/*
+ * cheap__clgamma — Complex log-Gamma via Lanczos approximation.
+ *
+ * Computes ln(Gamma(re + i*im)) = (*out_re) + i*(*out_im).
+ * For re < 0.5, uses the reflection formula:
+ *   lnGamma(z) = ln(pi / sin(pi*z)) - lnGamma(1 - z)
+ */
+static inline void cheap__clgamma(double re, double im,
+                                    double* out_re, double* out_im)
+{
+    static const double g = 7.0;
+    static const double c[9] = {
+        0.99999999999980993,
+        676.5203681218851,
+       -1259.1392167224028,
+        771.32342877765313,
+       -176.61502916214059,
+        12.507343278686905,
+       -0.13857109526572012,
+        9.9843695780195716e-6,
+        1.5056327351493116e-7
+    };
+
+    if (re < 0.5) {
+        /* Reflection: lnGamma(z) = ln(pi/sin(pi*z)) - lnGamma(1-z) */
+        double sin_re, sin_im;
+        sin_re = sin(M_PI * re) * cosh(M_PI * im);
+        sin_im = cos(M_PI * re) * sinh(M_PI * im);
+
+        double log_sin_r, log_sin_i;
+        cheap__clog(sin_re, sin_im, &log_sin_r, &log_sin_i);
+
+        double lg1r, lg1i;
+        cheap__clgamma(1.0 - re, -im, &lg1r, &lg1i);
+
+        *out_re = log(M_PI) - log_sin_r - lg1r;
+        *out_im =            - log_sin_i - lg1i;
+        return;
+    }
+
+    /* Lanczos series for Re(z) >= 0.5 */
+    re -= 1.0;
+
+    /* x = c[0] + sum_{i=1}^{8} c[i] / (z + i) */
+    double xr = c[0], xi = 0.0;
+    for (int i = 1; i <= 8; ++i) {
+        double dr = re + (double)i;
+        double di = im;
+        double qr, qi;
+        cheap__cdiv(c[i], 0.0, dr, di, &qr, &qi);
+        xr += qr;
+        xi += qi;
+    }
+
+    /* t = z + g + 0.5 */
+    double tr = re + g + 0.5;
+    double ti = im;
+
+    /* lnGamma = 0.5*ln(2*pi) + (z + 0.5)*ln(t) - t + ln(x) */
+    double log_t_r, log_t_i;
+    cheap__clog(tr, ti, &log_t_r, &log_t_i);
+
+    /* (z + 0.5) * ln(t) */
+    double zph_r = re + 0.5, zph_i = im;
+    double term1_r, term1_i;
+    cheap__cmul(zph_r, zph_i, log_t_r, log_t_i, &term1_r, &term1_i);
+
+    /* ln(x) */
+    double log_x_r, log_x_i;
+    cheap__clog(xr, xi, &log_x_r, &log_x_i);
+
+    *out_re = 0.5 * log(2.0 * M_PI) + term1_r - tr + log_x_r;
+    *out_im =                           term1_i - ti + log_x_i;
+}
+
+/*
+ * cheap_weights_mandelbrot — Mandelbrot multifractal spectral weights.
+ *
+ *   weights_out[k] = |Gamma(H + i*tau_k) / Gamma(1-H + i*tau_k)|
+ *
+ * where tau_k = pi*k/n. H must be in (0, 1).
+ * At H = 0.5, all weights equal 1.0 (symmetry).
+ * Computed in log-space via Lanczos complex log-Gamma.
+ */
+static inline int cheap_weights_mandelbrot(int n, double H,
+                                             double* weights_out)
+{
+    if (n < 2 || H <= 0.0 || H >= 1.0 || !weights_out) return CHEAP_EINVAL;
+
+    /* k = 0: real Gamma ratio */
+    weights_out[0] = exp(lgamma(H) - lgamma(1.0 - H));
+
+    for (int k = 1; k < n; ++k) {
+        double tau = M_PI * (double)k / (double)n;
+        double lg_num_re, lg_num_im;
+        double lg_den_re, lg_den_im;
+        cheap__clgamma(H, tau, &lg_num_re, &lg_num_im);
+        cheap__clgamma(1.0 - H, tau, &lg_den_re, &lg_den_im);
+        weights_out[k] = exp(lg_num_re - lg_den_re);
+    }
+    return CHEAP_OK;
+}
+
+/* ============================================================
+ * RMT Denoising — Marchenko-Pastur thresholding
+ * ============================================================ */
+
+/*
+ * cheap_weights_rmt_hard — Hard Marchenko-Pastur thresholding.
+ *
+ *   lambda_plus = sigma_sq * (1 + sqrt(c))^2
+ *   weights_out[k] = (lambda[k] > lambda_plus) ? lambda[k] : 0
+ *
+ * Accepts user-provided eigenvalues (any family).
+ * c = N/p is the aspect ratio (number of samples / dimension).
+ */
+static inline int cheap_weights_rmt_hard(const double* lambda, int n,
+                                           double sigma_sq, double c,
+                                           double* weights_out)
+{
+    if (n < 2 || !lambda || sigma_sq <= 0.0 || c <= 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    double sc = sqrt(c);
+    double lambda_plus = sigma_sq * (1.0 + sc) * (1.0 + sc);
+    for (int k = 0; k < n; ++k) {
+        if (!isfinite(lambda[k])) return CHEAP_EDOM;
+        weights_out[k] = (lambda[k] > lambda_plus) ? lambda[k] : 0.0;
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_rmt_shrink — Optimal nonlinear shrinkage (Donoho-Gavish).
+ *
+ * For lambda[k] <= lambda_plus: weights_out[k] = 0.
+ * For lambda[k] >  lambda_plus:
+ *   l = lambda[k] / sigma_sq
+ *   weights_out[k] = lambda[k] * sqrt((l - lp)*(l - lm)) / l
+ *
+ * where lp = (1+sqrt(c))^2, lm = (1-sqrt(c))^2.
+ * This is the asymptotically optimal Frobenius-norm shrinkage.
+ */
+static inline int cheap_weights_rmt_shrink(const double* lambda, int n,
+                                             double sigma_sq, double c,
+                                             double* weights_out)
+{
+    if (n < 2 || !lambda || sigma_sq <= 0.0 || c <= 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    double sc = sqrt(c);
+    double lp = (1.0 + sc) * (1.0 + sc);
+    double lm = (1.0 - sc) * (1.0 - sc);
+    double lambda_plus = sigma_sq * lp;
+    for (int k = 0; k < n; ++k) {
+        if (!isfinite(lambda[k])) return CHEAP_EDOM;
+        if (lambda[k] <= lambda_plus) {
+            weights_out[k] = 0.0;
+        } else {
+            double l = lambda[k] / sigma_sq;
+            double factor = sqrt(fmax(0.0, (l - lp) * (l - lm)));
+            weights_out[k] = lambda[k] * factor / l;
+        }
+    }
+    return CHEAP_OK;
+}
+
+/* ============================================================
  * Random Fourier Features (RFF)
  *
  * Approximates a Gaussian kernel k(x,y) = exp(-||x-y||^2/(2*sigma^2))

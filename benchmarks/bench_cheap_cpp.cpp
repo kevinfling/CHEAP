@@ -197,6 +197,28 @@ static void run_rff_benchmarks() {
 }
 
 /* =========================================================================
+ * Spectral weight constructor benchmarks
+ * ========================================================================= */
+
+static void run_weight_benchmarks(int n)
+{
+    double wms; uint64_t tk;
+    std::vector<double> w(static_cast<std::size_t>(n));
+
+    run_bench([&]{ cheap::weights_fractional(n, 0.4); }, wms, tk);
+    print_result("wt_fractional_cpp", n, wms, tk);
+
+    run_bench([&]{ cheap::weights_wiener(n, 1.0); }, wms, tk);
+    print_result("wt_wiener_cpp", n, wms, tk);
+
+    run_bench([&]{ cheap::weights_specnorm(n, 1e-3); }, wms, tk);
+    print_result("wt_specnorm_cpp", n, wms, tk);
+
+    run_bench([&]{ cheap::weights_mandelbrot(n, 0.7); }, wms, tk);
+    print_result("wt_mandelbrot_cpp", n, wms, tk);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 
@@ -213,6 +235,9 @@ int main() {
         run_toeplitz_benchmarks(sizes[i]);
 
     run_rff_benchmarks();
+
+    for (int i = 0; i < nsizes; ++i)
+        run_weight_benchmarks(sizes[i]);
 
     return 0;
 }
