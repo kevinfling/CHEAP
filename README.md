@@ -232,9 +232,14 @@ benchmarks/
   bench_cheap.c  — quick benchmarks
   bench_cheap_cpp.cpp
 examples/
-  gp_regression.c, optimal_transport.c, lqr_mpc.c,
-  fractional_diff.c, poisson_solver.c, ns_dissipation.c,
-  toeplitz_solve.c, online_filter.c
+  c/             — C99 examples
+    gp_regression.c, optimal_transport.c, lqr_mpc.c,
+    fractional_diff.c, poisson_solver.c, ns_dissipation.c,
+    toeplitz_solve.c, online_filter.c
+  cpp/           — C++17 equivalents
+    gp_regression.cpp, optimal_transport.cpp, lqr_mpc.cpp,
+    fractional_diff.cpp, poisson_solver.cpp, ns_dissipation.cpp,
+    toeplitz_solve.cpp, online_filter.cpp
 ```
 
 ## When to Use CHEAP

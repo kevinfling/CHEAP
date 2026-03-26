@@ -103,9 +103,9 @@ target_link_libraries(bench_cheap_stats PRIVATE cheap)
 target_compile_definitions(bench_cheap_stats PRIVATE _POSIX_C_SOURCE=199309L)
 
 # ---------------------------------------------------------------------------
-# Examples (built but NOT registered with CTest)
+# C Examples (built but NOT registered with CTest)
 # ---------------------------------------------------------------------------
-set(CHEAP_EXAMPLES
+set(CHEAP_EXAMPLES_C
     gp_regression
     toeplitz_solve
     optimal_transport
@@ -116,8 +116,8 @@ set(CHEAP_EXAMPLES
     online_filter
 )
 
-foreach(example ${CHEAP_EXAMPLES})
-    add_executable(${example} examples/${example}.c)
+foreach(example ${CHEAP_EXAMPLES_C})
+    add_executable(${example} examples/c/${example}.c)
     target_link_libraries(${example} PRIVATE cheap)
     target_compile_definitions(${example} PRIVATE _POSIX_C_SOURCE=199309L)
 endforeach()
@@ -152,4 +152,22 @@ if(CHEAP_BUILD_CPP)
     add_executable(bench_cheap_cpp benchmarks/bench_cheap_cpp.cpp)
     target_link_libraries(bench_cheap_cpp PRIVATE cheap_cpp)
     target_compile_definitions(bench_cheap_cpp PRIVATE _POSIX_C_SOURCE=199309L)
+
+    # C++ examples
+    set(CHEAP_EXAMPLES_CPP
+        gp_regression
+        toeplitz_solve
+        optimal_transport
+        lqr_mpc
+        fractional_diff
+        poisson_solver
+        ns_dissipation
+        online_filter
+    )
+
+    foreach(example ${CHEAP_EXAMPLES_CPP})
+        add_executable(${example}_cpp examples/cpp/${example}.cpp)
+        target_link_libraries(${example}_cpp PRIVATE cheap_cpp)
+        target_compile_definitions(${example}_cpp PRIVATE _POSIX_C_SOURCE=199309L)
+    endforeach()
 endif()
