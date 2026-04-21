@@ -13,13 +13,22 @@ set(CMAKE_C_EXTENSIONS OFF)
 # ---------------------------------------------------------------------------
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING
-        "Build type: Debug | Release | Asan" FORCE)
+        "Build type: Debug | Release | Asan | Ubsan | Tsan" FORCE)
 endif()
 
 set(CMAKE_C_FLAGS_DEBUG   "-O0 -g")
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_C_FLAGS_ASAN    "-O1 -g -fsanitize=address,undefined")
 set(CMAKE_EXE_LINKER_FLAGS_ASAN "-fsanitize=address,undefined")
+set(CMAKE_C_FLAGS_UBSAN   "-O1 -g -fsanitize=undefined -fno-sanitize-recover=all")
+set(CMAKE_EXE_LINKER_FLAGS_UBSAN "-fsanitize=undefined")
+set(CMAKE_C_FLAGS_TSAN    "-O1 -g -fsanitize=thread")
+set(CMAKE_EXE_LINKER_FLAGS_TSAN "-fsanitize=thread")
+
+# Mirror sanitizer flags to C++ so cheap_cpp targets inherit them
+set(CMAKE_CXX_FLAGS_ASAN  "${CMAKE_C_FLAGS_ASAN}")
+set(CMAKE_CXX_FLAGS_UBSAN "${CMAKE_C_FLAGS_UBSAN}")
+set(CMAKE_CXX_FLAGS_TSAN  "${CMAKE_C_FLAGS_TSAN}")
 
 # ---------------------------------------------------------------------------
 # FFTW3 detection — three-tier fallback
@@ -102,7 +111,12 @@ set_tests_properties(simd PROPERTIES TIMEOUT 60)
 add_executable(bench_cheap benchmarks/bench_cheap.c)
 target_link_libraries(bench_cheap PRIVATE cheap)
 target_compile_definitions(bench_cheap PRIVATE _POSIX_C_SOURCE=199309L)
-target_compile_options(bench_cheap PRIVATE -O3 -ffast-math -fopenmp-simd)
+# -ffast-math only outside sanitizer builds (UBSan flags inf/nan use under fast-math)
+if(NOT CMAKE_BUILD_TYPE MATCHES "^(Asan|Ubsan|Tsan)$")
+    target_compile_options(bench_cheap PRIVATE -O3 -ffast-math -fopenmp-simd)
+else()
+    target_compile_options(bench_cheap PRIVATE -fopenmp-simd)
+endif()
 
 # Statistical benchmark (FFTW_PATIENT with repeated trials)
 add_executable(bench_cheap_stats benchmarks/bench_cheap_stats.c)
