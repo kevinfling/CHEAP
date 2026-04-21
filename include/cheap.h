@@ -309,50 +309,6 @@ static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
  * ============================================================ */
 
 /*
- * cheap_forward — DCT-II of input into ctx->workspace.
- * After this call, ctx->workspace contains the spectral coefficients.
- */
-static inline int cheap_forward(cheap_ctx* restrict ctx,
-                                  const double* restrict input)
-{
-    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
-    if (!input) return CHEAP_EINVAL;
-    const int n = ctx->n;
-    for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
-    memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
-    fftw_execute(ctx->plan_fwd);
-    return CHEAP_OK;
-}
-
-/*
- * cheap_inverse — iDCT-III of ctx->workspace into output, with 1/(2N) normalization.
- * Assumes ctx->workspace already contains spectral data (e.g. from cheap_forward
- * followed by pointwise manipulation).
- */
-static inline int cheap_inverse(cheap_ctx* restrict ctx,
-                                  double* restrict output)
-{
-    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
-    if (!output) return CHEAP_EINVAL;
-    const int n = ctx->n;
-    const double norm = 1.0 / (2.0 * (double)n);
-    fftw_execute(ctx->plan_inv);
-    for (int i = 0; i < n; ++i) output[i] = ctx->workspace[i] * norm;
-    return CHEAP_OK;
-}
-
-/*
- * cheap_apply — Universal spectral operation:
- *   output = iDCT( DCT(input) ⊙ weights ) / (2N)
- *
- * This is the fundamental building block. Every spectral algorithm reduces to
- * choosing the right weight vector:
- *   - KRR solve:   weights[k] = 1 / (lambda[k] + lambda_reg)
- *   - Reparam:     weights[k] = sqrt(lambda[k])
- *   - LQR/MPC:     weights[k] = 1 / (lambda[k] + R)
- *   - Frac diff:   weights[k] = (2*sin(omega_k/2))^d
- */
-/*
  * cheap__mul_inplace — ws[k] *= w[k], vectorized where available.
  * ws is aligned (ctx->workspace); w may be unaligned (user buffer).
  */
@@ -378,10 +334,11 @@ static inline void cheap__mul_inplace(double* restrict ws,
 
 /*
  * cheap__scale_copy — output[i] = ws[i] * norm, vectorized where
- * available. ws is aligned; output may be unaligned.
+ * available. ws is aligned; output may be unaligned. Safe when
+ * output == ws (in-place variant), so no restrict on the pointers.
  */
-static inline void cheap__scale_copy(double* restrict output,
-                                       const double* restrict ws,
+static inline void cheap__scale_copy(double* output,
+                                       const double* ws,
                                        double norm, int n)
 {
     int i = 0;
@@ -401,6 +358,79 @@ static inline void cheap__scale_copy(double* restrict output,
     for (; i < n; ++i) output[i] = ws[i] * norm;
 }
 
+/*
+ * cheap_forward — DCT-II of input into ctx->workspace.
+ * After this call, ctx->workspace contains the spectral coefficients.
+ */
+static inline int cheap_forward(cheap_ctx* restrict ctx,
+                                  const double* restrict input)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!input) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
+    memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
+    fftw_execute(ctx->plan_fwd);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_forward_inplace — DCT-II of ctx->workspace in place.
+ * Caller is responsible for populating ctx->workspace with input
+ * data first (e.g. via cheap_workspace(ctx)). Skips the input
+ * memcpy and isfinite sweep — caller must guarantee finiteness.
+ */
+static inline int cheap_forward_inplace(cheap_ctx* restrict ctx)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    fftw_execute(ctx->plan_fwd);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_inverse — iDCT-III of ctx->workspace into output, with 1/(2N) normalization.
+ * Assumes ctx->workspace already contains spectral data (e.g. from cheap_forward
+ * followed by pointwise manipulation). SIMD-accelerated scale pass.
+ */
+static inline int cheap_inverse(cheap_ctx* restrict ctx,
+                                  double* restrict output)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!output) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (2.0 * (double)n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(output, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_inverse_inplace — iDCT-III of ctx->workspace in place with
+ * normalization. Leaves the result in ctx->workspace; caller reads
+ * via cheap_workspace(ctx). Saves one memcpy relative to cheap_inverse.
+ */
+static inline int cheap_inverse_inplace(cheap_ctx* restrict ctx)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    const int n = ctx->n;
+    const double norm = 1.0 / (2.0 * (double)n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(ctx->workspace, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_apply — Universal spectral operation:
+ *   output = iDCT( DCT(input) ⊙ weights ) / (2N)
+ *
+ * This is the fundamental building block. Every spectral algorithm reduces to
+ * choosing the right weight vector:
+ *   - KRR solve:   weights[k] = 1 / (lambda[k] + lambda_reg)
+ *   - Reparam:     weights[k] = sqrt(lambda[k])
+ *   - LQR/MPC:     weights[k] = 1 / (lambda[k] + R)
+ *   - Frac diff:   weights[k] = (2*sin(omega_k/2))^d
+ * AVX2/NEON accelerated pointwise-multiply and scale passes.
+ */
 static inline int cheap_apply(cheap_ctx* restrict ctx,
                                 const double* restrict input,
                                 const double* restrict weights,

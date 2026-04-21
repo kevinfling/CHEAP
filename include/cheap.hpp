@@ -116,8 +116,14 @@ public:
     void forward(const double* input) { detail::check(try_forward(input)); }
     int try_forward(const double* input) noexcept { return cheap_forward(&ctx_, input); }
 
+    void forward_inplace() { detail::check(try_forward_inplace()); }
+    int try_forward_inplace() noexcept { return cheap_forward_inplace(&ctx_); }
+
     void inverse(double* output) { detail::check(try_inverse(output)); }
     int try_inverse(double* output) noexcept { return cheap_inverse(&ctx_, output); }
+
+    void inverse_inplace() { detail::check(try_inverse_inplace()); }
+    int try_inverse_inplace() noexcept { return cheap_inverse_inplace(&ctx_); }
 
     void apply(const double* input, const double* weights, double* output) {
         detail::check(try_apply(input, weights, output));
