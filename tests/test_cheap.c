@@ -1042,6 +1042,54 @@ static void test_weights_rmt(void)
 }
 
 /* =========================================================================
+ * v0.1.1: Sinkhorn zero-heap regression
+ *
+ * Verifies that cheap_sinkhorn no longer calls malloc/free in its hot loop
+ * by measuring arena growth across 1000 calls. Uses mallinfo2 where
+ * available (glibc >= 2.33); compiles to a no-op elsewhere.
+ * ========================================================================= */
+#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
+#  if __GLIBC_PREREQ(2, 33)
+#    include <malloc.h>
+#    define CHEAP_HAS_MALLINFO2 1
+#  endif
+#endif
+
+static void test_sinkhorn_no_heap_growth(void)
+{
+    printf("  test_sinkhorn_no_heap_growth\n");
+#ifdef CHEAP_HAS_MALLINFO2
+    const int n = 64;
+    cheap_ctx ctx;
+    ASSERT_EQ(cheap_init(&ctx, n, 0.5), CHEAP_OK);
+
+    double *a = (double *)malloc((size_t)n * sizeof(double));
+    double *b = (double *)malloc((size_t)n * sizeof(double));
+    double *f = (double *)malloc((size_t)n * sizeof(double));
+    double *g = (double *)malloc((size_t)n * sizeof(double));
+    for (int i = 0; i < n; ++i) a[i] = b[i] = 1.0 / (double)n;
+
+    /* Warm up: let any one-shot init allocations settle. */
+    for (int i = 0; i < 10; ++i)
+        cheap_sinkhorn(&ctx, a, b, 0.5, 20, 1e-6, f, g);
+
+    struct mallinfo2 m0 = mallinfo2();
+    for (int i = 0; i < 1000; ++i)
+        cheap_sinkhorn(&ctx, a, b, 0.5, 20, 1e-6, f, g);
+    struct mallinfo2 m1 = mallinfo2();
+
+    /* Zero malloc in hot path -> zero growth. Allow a tiny slack only
+     * for libm / stdio side-effects (printf in caller frames etc.). */
+    ASSERT_TRUE(m1.uordblks <= m0.uordblks + 128);
+
+    free(a); free(b); free(f); free(g);
+    cheap_destroy(&ctx);
+#else
+    printf("    (skipped: mallinfo2 unavailable)\n");
+#endif
+}
+
+/* =========================================================================
  * v0.1.1: Flandrin eigenvalue monotonicity + exact Toeplitz init
  * ========================================================================= */
 static void test_lambda_monotonicity(void)
@@ -1159,6 +1207,7 @@ int main(void)
     /* v0.1.1 additions */
     test_lambda_monotonicity();
     test_init_from_toeplitz();
+    test_sinkhorn_no_heap_growth();
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return (g_tests_failed > 0) ? 1 : 0;

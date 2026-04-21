@@ -76,6 +76,13 @@ typedef struct {
     double* restrict gibbs;
     double* restrict sqrt_lambda;
     double* restrict workspace;
+    /* Preallocated scratch reused by Sinkhorn (and, in future, other
+     * iterative solvers). All three are n-doubles, FFTW-aligned, and
+     * lifecycle-managed by cheap_init / cheap_destroy. Never expose
+     * these to users — they are overwritten on every call. */
+    double* restrict scratch1;
+    double* restrict scratch2;
+    double* restrict prev_g;
     fftw_plan plan_fwd;
     fftw_plan plan_inv;
     double current_eps;
@@ -91,6 +98,9 @@ static inline void cheap_destroy(cheap_ctx* ctx)
     if (ctx->gibbs)      { fftw_free(ctx->gibbs);      ctx->gibbs = NULL; }
     if (ctx->sqrt_lambda) { fftw_free(ctx->sqrt_lambda); ctx->sqrt_lambda = NULL; }
     if (ctx->workspace)  { fftw_free(ctx->workspace);  ctx->workspace = NULL; }
+    if (ctx->scratch1)   { fftw_free(ctx->scratch1);   ctx->scratch1 = NULL; }
+    if (ctx->scratch2)   { fftw_free(ctx->scratch2);   ctx->scratch2 = NULL; }
+    if (ctx->prev_g)     { fftw_free(ctx->prev_g);     ctx->prev_g = NULL; }
     ctx->is_initialized = 0;
 }
 
@@ -109,7 +119,11 @@ static inline int cheap__alloc_ctx(cheap_ctx* ctx, int n)
     ctx->gibbs       = (double*)fftw_malloc((size_t)n * sizeof(double));
     ctx->sqrt_lambda = (double*)fftw_malloc((size_t)n * sizeof(double));
     ctx->workspace   = (double*)fftw_malloc((size_t)n * sizeof(double));
-    if (!ctx->lambda || !ctx->gibbs || !ctx->sqrt_lambda || !ctx->workspace) {
+    ctx->scratch1    = (double*)fftw_malloc((size_t)n * sizeof(double));
+    ctx->scratch2    = (double*)fftw_malloc((size_t)n * sizeof(double));
+    ctx->prev_g      = (double*)fftw_malloc((size_t)n * sizeof(double));
+    if (!ctx->lambda || !ctx->gibbs || !ctx->sqrt_lambda || !ctx->workspace ||
+        !ctx->scratch1 || !ctx->scratch2 || !ctx->prev_g) {
         cheap_destroy(ctx);
         return CHEAP_ENOMEM;
     }
@@ -314,29 +328,25 @@ static inline int cheap_sinkhorn(cheap_ctx* ctx,
         sum_b += b[i];
     }
     if (fabs(sum_a - sum_b) > 1e-8 * fmax(fabs(sum_a), 1.0)) return CHEAP_EINVAL;
-    for (int i = 0; i < ctx->n; ++i) f[i] = g[i] = 0.0;
-    double* temp = (double*)malloc((size_t)ctx->n * sizeof(double));
-    double* prev_g = (double*)malloc((size_t)ctx->n * sizeof(double));
-    if (!temp || !prev_g) {
-        free(temp); free(prev_g);
-        return CHEAP_ENOMEM;
-    }
+    const int n = ctx->n;
+    for (int i = 0; i < n; ++i) f[i] = g[i] = 0.0;
+    /* Reuse ctx-owned scratch buffers — zero heap traffic in the hot loop. */
+    double* const temp   = ctx->scratch1;
+    double* const prev_g = ctx->prev_g;
     int iter;
     for (iter = 0; iter < max_iter; ++iter) {
-        memcpy(prev_g, g, (size_t)ctx->n * sizeof(double));
+        memcpy(prev_g, g, (size_t)n * sizeof(double));
         cheap_apply_hybrid_log(ctx, g, temp);
-        for (int i = 0; i < ctx->n; ++i) f[i] = log(a[i] + CHEAP_EPS_DIV) - temp[i];
+        for (int i = 0; i < n; ++i) f[i] = log(a[i] + CHEAP_EPS_DIV) - temp[i];
         cheap_apply_hybrid_log(ctx, f, temp);
-        for (int i = 0; i < ctx->n; ++i) g[i] = log(b[i] + CHEAP_EPS_DIV) - temp[i];
+        for (int i = 0; i < n; ++i) g[i] = log(b[i] + CHEAP_EPS_DIV) - temp[i];
         double max_diff = 0.0;
-        for (int i = 0; i < ctx->n; ++i) {
+        for (int i = 0; i < n; ++i) {
             double diff = fabs(g[i] - prev_g[i]);
             if (diff > max_diff) max_diff = diff;
         }
         if (max_diff < tol) break;
     }
-    free(temp);
-    free(prev_g);
     return (iter < max_iter) ? CHEAP_OK : CHEAP_ENOCONV;
 }
 
