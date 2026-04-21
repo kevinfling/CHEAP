@@ -48,6 +48,14 @@ static double wall_seconds(void)
 #define WARMUP_ITERS  3
 #define BENCH_ITERS  10
 
+#define CHECK_RC(expr) do { \
+    int _rc = (expr); \
+    if (_rc != CHEAP_OK) { \
+        fprintf(stderr, "%s:%d: %s failed (rc=%d)\n", __FILE__, __LINE__, #expr, _rc); \
+        exit(EXIT_FAILURE); \
+    } \
+} while (0)
+
 static void run_bench(void (*bench_fn)(void *), void *state,
                       double *out_wall_ms, uint64_t *out_ticks)
 {
@@ -136,7 +144,7 @@ static void run_core_benchmarks(int n)
     /* cheap_apply with KRR weights */
     {
         apply_state *s = (apply_state *)malloc(sizeof(*s));
-        cheap_init(&s->ctx, n, H);
+        CHECK_RC(cheap_init(&s->ctx, n, H));
         s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->output  = (double *)fftw_malloc((size_t)n * sizeof(double));
@@ -154,7 +162,7 @@ static void run_core_benchmarks(int n)
     /* cheap_apply with sqrt_lambda (reparam) */
     {
         apply_state *s = (apply_state *)malloc(sizeof(*s));
-        cheap_init(&s->ctx, n, H);
+        CHECK_RC(cheap_init(&s->ctx, n, H));
         s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->weights = s->ctx.sqrt_lambda;  /* borrow — don't free */
         s->output  = (double *)fftw_malloc((size_t)n * sizeof(double));
@@ -168,7 +176,7 @@ static void run_core_benchmarks(int n)
     /* cheap_forward */
     {
         fwd_inv_state *s = (fwd_inv_state *)malloc(sizeof(*s));
-        cheap_init(&s->ctx, n, H);
+        CHECK_RC(cheap_init(&s->ctx, n, H));
         s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
         for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
@@ -181,7 +189,7 @@ static void run_core_benchmarks(int n)
     /* cheap_inverse */
     {
         fwd_inv_state *s = (fwd_inv_state *)malloc(sizeof(*s));
-        cheap_init(&s->ctx, n, H);
+        CHECK_RC(cheap_init(&s->ctx, n, H));
         s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
         for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
@@ -199,7 +207,7 @@ static void run_core_benchmarks(int n)
         s->b = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->f = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->g = (double *)fftw_malloc((size_t)n * sizeof(double));
-        cheap_init(&s->ctx, n, H);
+        CHECK_RC(cheap_init(&s->ctx, n, H));
         for (int i = 0; i < n; ++i) s->a[i] = s->b[i] = 1.0 / (double)n;
         double wms; uint64_t tk;
         run_bench(bench_sinkhorn, s, &wms, &tk);
@@ -214,7 +222,7 @@ static void run_toeplitz_benchmarks(int n)
 {
     if (n >= 8192) fprintf(stderr, "  Planning FFTW for n=%d ...\n", n);
     toep_state *s = (toep_state *)malloc(sizeof(*s));
-    cheap_init(&s->ctx, n, 0.5);
+    CHECK_RC(cheap_init(&s->ctx, n, 0.5));
 
     double *t = (double *)calloc((size_t)n, sizeof(double));
     t[0] = 4.0; t[1] = -1.0;
@@ -351,7 +359,7 @@ static void bench_apply_wiener(void *p) {
 static void run_apply_weight_benchmarks(int n)
 {
     apply_wt_state *s = (apply_wt_state *)malloc(sizeof(*s));
-    cheap_init(&s->ctx, n, 0.7);
+    CHECK_RC(cheap_init(&s->ctx, n, 0.7));
     s->n = n;
     s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
     s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));

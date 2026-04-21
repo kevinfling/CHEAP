@@ -225,8 +225,16 @@ static void test_apply_krr(void)
         ASSERT_NEAR(res, 0.0, 1e-6);
     }
 
-    /* Large regularization: alpha ≈ y / lambda_reg */
-    const double big_reg = 1e6;
+    /*
+     * Large regularization: alpha ≈ y / big_reg.
+     * This approximation only holds when big_reg dominates every eigenvalue,
+     * including the DC mode. With Flandrin eigenvalues, lambda[0] is the
+     * largest (~10^8 for n=128, H=0.7 after the v0.1.1 asymptotic fix), so
+     * we pick big_reg well above it.
+     */
+    double max_lambda = ctx.lambda[0];
+    for (int k = 1; k < n; ++k) if (ctx.lambda[k] > max_lambda) max_lambda = ctx.lambda[k];
+    const double big_reg = 1e6 * max_lambda;
     for (int k = 0; k < n; ++k) {
         double denom = ctx.lambda[k] + big_reg;
         w_krr[k] = 1.0 / denom;
@@ -1034,6 +1042,73 @@ static void test_weights_rmt(void)
 }
 
 /* =========================================================================
+ * v0.1.1: Flandrin eigenvalue monotonicity + exact Toeplitz init
+ * ========================================================================= */
+static void test_lambda_monotonicity(void)
+{
+    printf("  test_lambda_monotonicity\n");
+    const double H_vals[] = {0.1, 0.3, 0.5, 0.7, 0.9};
+    const int n_vals[]    = {16, 256, 4096};
+    for (size_t hi = 0; hi < sizeof(H_vals)/sizeof(H_vals[0]); ++hi) {
+        for (size_t ni = 0; ni < sizeof(n_vals)/sizeof(n_vals[0]); ++ni) {
+            const int n = n_vals[ni];
+            cheap_ctx ctx = {0};
+            ASSERT_EQ(cheap_init(&ctx, n, H_vals[hi]), CHEAP_OK);
+            for (int k = 1; k < n; ++k) {
+                ASSERT_TRUE(isfinite(ctx.lambda[k]));
+                ASSERT_TRUE(ctx.lambda[k-1] > ctx.lambda[k]);
+            }
+            cheap_destroy(&ctx);
+        }
+    }
+}
+
+static void test_init_from_toeplitz(void)
+{
+    printf("  test_init_from_toeplitz\n");
+    /*
+     * Build the first column of the symmetric Toeplitz matrix that has the
+     * Flandrin eigenvalues as its DCT-II spectrum. Starting from lambda[]
+     * computed by cheap_init, inverse-DCT gives us the first column t[].
+     * Then cheap_init_from_toeplitz(t) should reconstruct the same lambda[].
+     */
+    const int n = 128;
+    const double H = 0.6;
+    cheap_ctx ref;
+    ASSERT_EQ(cheap_init(&ref, n, H), CHEAP_OK);
+
+    double *t = (double *)fftw_malloc((size_t)n * sizeof(double));
+    /* Fill workspace with lambda, run inverse DCT (DCT-III) to recover t. */
+    for (int k = 0; k < n; ++k) ref.workspace[k] = ref.lambda[k];
+    fftw_execute(ref.plan_inv);
+    const double norm = 1.0 / (2.0 * (double)n);
+    for (int i = 0; i < n; ++i) t[i] = ref.workspace[i] * norm;
+
+    cheap_ctx ctx;
+    ASSERT_EQ(cheap_init_from_toeplitz(&ctx, n, t), CHEAP_OK);
+    ASSERT_TRUE(ctx.is_initialized == 1);
+    ASSERT_TRUE(ctx.current_H == -1.0);
+    for (int k = 0; k < n; ++k) {
+        ASSERT_NEAR(ctx.lambda[k], ref.lambda[k], 1e-8 * ref.lambda[0]);
+    }
+
+    /* Error paths */
+    cheap_ctx bad;
+    ASSERT_EQ(cheap_init_from_toeplitz(&bad, 1, t), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_toeplitz(NULL, n, t), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_toeplitz(&bad, n, NULL), CHEAP_EINVAL);
+
+    double *t_bad = (double *)fftw_malloc((size_t)n * sizeof(double));
+    for (int i = 0; i < n; ++i) t_bad[i] = 0.0;
+    t_bad[0] = NAN;
+    ASSERT_EQ(cheap_init_from_toeplitz(&bad, n, t_bad), CHEAP_EDOM);
+
+    fftw_free(t); fftw_free(t_bad);
+    cheap_destroy(&ctx);
+    cheap_destroy(&ref);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 int main(void)
@@ -1080,6 +1155,10 @@ int main(void)
     test_weights_specnorm();
     test_weights_mandelbrot();
     test_weights_rmt();
+
+    /* v0.1.1 additions */
+    test_lambda_monotonicity();
+    test_init_from_toeplitz();
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return (g_tests_failed > 0) ? 1 : 0;

@@ -94,17 +94,21 @@ static inline void cheap_destroy(cheap_ctx* ctx)
     ctx->is_initialized = 0;
 }
 
-static inline int cheap_init(cheap_ctx* ctx, int n, double H)
+/*
+ * cheap__alloc_ctx — private helper: allocate buffers and build FFTW plans.
+ * Leaves lambda[] uninitialized; caller fills it. Returns CHEAP_OK or
+ * CHEAP_ENOMEM (and calls cheap_destroy on failure).
+ */
+static inline int cheap__alloc_ctx(cheap_ctx* ctx, int n)
 {
-    if (!ctx || n < 2 || H <= 0.0 || H >= 1.0) return CHEAP_EINVAL;
     memset(ctx, 0, sizeof(*ctx));
     ctx->n = n;
     ctx->current_eps = -1.0;
-    ctx->current_H = H;
-    ctx->lambda     = (double*)fftw_malloc((size_t)n * sizeof(double));
-    ctx->gibbs      = (double*)fftw_malloc((size_t)n * sizeof(double));
+    ctx->current_H = -1.0;
+    ctx->lambda      = (double*)fftw_malloc((size_t)n * sizeof(double));
+    ctx->gibbs       = (double*)fftw_malloc((size_t)n * sizeof(double));
     ctx->sqrt_lambda = (double*)fftw_malloc((size_t)n * sizeof(double));
-    ctx->workspace  = (double*)fftw_malloc((size_t)n * sizeof(double));
+    ctx->workspace   = (double*)fftw_malloc((size_t)n * sizeof(double));
     if (!ctx->lambda || !ctx->gibbs || !ctx->sqrt_lambda || !ctx->workspace) {
         cheap_destroy(ctx);
         return CHEAP_ENOMEM;
@@ -117,17 +121,80 @@ static inline int cheap_init(cheap_ctx* ctx, int n, double H)
         cheap_destroy(ctx);
         return CHEAP_ENOMEM;
     }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap__finalize_sqrt_lambda — derive sqrt_lambda from lambda and flip the
+ * is_initialized flag. Called at the end of every init entry point.
+ *
+ * Force-inlined (on GCC/Clang) so that callers of cheap_init can statically
+ * observe that sqrt_lambda is fully written — avoids spurious
+ * -Wmaybe-uninitialized warnings at -O3.
+ */
+static inline void cheap__finalize_sqrt_lambda(cheap_ctx* ctx)
+{
+    for (int k = 0; k < ctx->n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+}
+
+static inline int cheap_init(cheap_ctx* ctx, int n, double H)
+{
+    if (!ctx || n < 2 || H <= 0.0 || H >= 1.0) return CHEAP_EINVAL;
+    int rc = cheap__alloc_ctx(ctx, n);
+    if (rc != CHEAP_OK) return rc;
+    ctx->current_H = H;
     const double pow_n_2H = pow((double)n, 2.0 * H);
     const double twoH_plus_1 = 2.0 * H + 1.0;
-    ctx->lambda[0] = CHEAP_EPS_LAMBDA * pow_n_2H;
+    /*
+     * Flandrin spectrum: lambda_k = N^{2H} * sin(pi*k/(2N))^{-(2H+1)}.
+     * The true lambda_0 diverges (DC singularity of fBm). We extrapolate
+     * via the tail's power-law slope: in the large-k asymptotic
+     * (Gupta-Joshi, n >> 1) lambda_k ~ k^{-(2H+1)}, so the ratio
+     * lambda_{k-1}/lambda_k -> (k/(k-1))^{2H+1}. Setting
+     * lambda_0 = lambda_1 * (lambda_1/lambda_2) preserves monotonicity
+     * and matches the asymptotic log-slope exactly.
+     */
     for (int k = 1; k < n; ++k) {
         double s = sin(M_PI * (double)k / (2.0 * (double)n));
         if (s < CHEAP_EPS_LOG) s = CHEAP_EPS_LOG;
         ctx->lambda[k] = pow_n_2H * pow(s, -twoH_plus_1);
     }
-    for (int k = 0; k < n; ++k)
-        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
-    ctx->is_initialized = 1;
+    if (n >= 3) {
+        ctx->lambda[0] = ctx->lambda[1] * (ctx->lambda[1] / ctx->lambda[2]);
+    } else {
+        /* n == 2: no second tail point; fall back to doubling lambda[1]. */
+        ctx->lambda[0] = 2.0 * ctx->lambda[1];
+    }
+    cheap__finalize_sqrt_lambda(ctx);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_init_from_toeplitz — initialize a context directly from the first
+ * column of a symmetric Toeplitz autocovariance matrix. Computes the exact
+ * DCT-II eigenvalues, bypassing the Flandrin asymptotic. Useful when the
+ * covariance is measured or derived from a non-fBm model.
+ *
+ *   t:  first column of the n-by-n symmetric Toeplitz matrix (length n).
+ *       All eigenvalues (entries of DCT-II(t)) must be strictly positive
+ *       for the context to be valid for KRR/Sinkhorn/etc.
+ *
+ * On success, ctx->lambda holds the exact eigenvalues and ctx->current_H
+ * remains -1.0 (sentinel indicating the Flandrin H is not applicable).
+ */
+static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
+                                             const double* t)
+{
+    if (!ctx || n < 2 || !t) return CHEAP_EINVAL;
+    for (int i = 0; i < n; ++i) if (!isfinite(t[i])) return CHEAP_EDOM;
+    int rc = cheap__alloc_ctx(ctx, n);
+    if (rc != CHEAP_OK) return rc;
+    memcpy(ctx->workspace, t, (size_t)n * sizeof(double));
+    fftw_execute(ctx->plan_fwd);
+    memcpy(ctx->lambda, ctx->workspace, (size_t)n * sizeof(double));
+    cheap__finalize_sqrt_lambda(ctx);
     return CHEAP_OK;
 }
 
