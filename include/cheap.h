@@ -220,7 +220,8 @@ static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
  * cheap_forward — DCT-II of input into ctx->workspace.
  * After this call, ctx->workspace contains the spectral coefficients.
  */
-static inline int cheap_forward(cheap_ctx* ctx, const double* input)
+static inline int cheap_forward(cheap_ctx* restrict ctx,
+                                  const double* restrict input)
 {
     if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
     if (!input) return CHEAP_EINVAL;
@@ -236,7 +237,8 @@ static inline int cheap_forward(cheap_ctx* ctx, const double* input)
  * Assumes ctx->workspace already contains spectral data (e.g. from cheap_forward
  * followed by pointwise manipulation).
  */
-static inline int cheap_inverse(cheap_ctx* ctx, double* output)
+static inline int cheap_inverse(cheap_ctx* restrict ctx,
+                                  double* restrict output)
 {
     if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
     if (!output) return CHEAP_EINVAL;
@@ -258,8 +260,10 @@ static inline int cheap_inverse(cheap_ctx* ctx, double* output)
  *   - LQR/MPC:     weights[k] = 1 / (lambda[k] + R)
  *   - Frac diff:   weights[k] = (2*sin(omega_k/2))^d
  */
-static inline int cheap_apply(cheap_ctx* ctx, const double* input,
-                                const double* weights, double* output)
+static inline int cheap_apply(cheap_ctx* restrict ctx,
+                                const double* restrict input,
+                                const double* restrict weights,
+                                double* restrict output)
 {
     if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
     if (!input || !weights || !output) return CHEAP_EINVAL;
@@ -278,7 +282,7 @@ static inline int cheap_apply(cheap_ctx* ctx, const double* input,
  * Sinkhorn optimal transport (max-log stabilized)
  * ============================================================ */
 
-static inline int cheap_recompute_gibbs(cheap_ctx* ctx, double eps)
+static inline int cheap_recompute_gibbs(cheap_ctx* restrict ctx, double eps)
 {
     if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
     if (eps <= 0.0) return CHEAP_EINVAL;
@@ -312,10 +316,12 @@ static inline void cheap_apply_hybrid_log(cheap_ctx* restrict ctx,
     }
 }
 
-static inline int cheap_sinkhorn(cheap_ctx* ctx,
-                                   const double* a, const double* b,
+static inline int cheap_sinkhorn(cheap_ctx* restrict ctx,
+                                   const double* restrict a,
+                                   const double* restrict b,
                                    double eps, int max_iter, double tol,
-                                   double* f, double* g)
+                                   double* restrict f,
+                                   double* restrict g)
 {
     if (!ctx || !ctx->is_initialized || !a || !b || !f || !g) return CHEAP_EINVAL;
     if (eps <= 0.0) return CHEAP_EINVAL;
@@ -359,9 +365,9 @@ static inline int cheap_sinkhorn(cheap_ctx* ctx,
  * the Toeplitz matrix or pre-computed eigenvalues.
  * ============================================================ */
 
-static inline int cheap_toeplitz_eigenvalues(cheap_ctx* ctx,
-                                                const double* t,
-                                                double* lambda_out)
+static inline int cheap_toeplitz_eigenvalues(cheap_ctx* restrict ctx,
+                                                const double* restrict t,
+                                                double* restrict lambda_out)
 {
     if (!ctx || !ctx->is_initialized || !t || !lambda_out) return CHEAP_EINVAL;
     const int n = ctx->n;
@@ -372,11 +378,11 @@ static inline int cheap_toeplitz_eigenvalues(cheap_ctx* ctx,
     return CHEAP_OK;
 }
 
-static inline int cheap_toeplitz_solve_precomp(cheap_ctx* ctx,
-                                                  const double* lambda_t,
-                                                  const double* y,
+static inline int cheap_toeplitz_solve_precomp(cheap_ctx* restrict ctx,
+                                                  const double* restrict lambda_t,
+                                                  const double* restrict y,
                                                   double lambda_reg,
-                                                  double* x)
+                                                  double* restrict x)
 {
     if (!ctx || !ctx->is_initialized || !lambda_t || !y || !x) return CHEAP_EINVAL;
     if (lambda_reg < 0.0) return CHEAP_EINVAL;
@@ -463,7 +469,7 @@ static inline double cheap__lcg_normal(cheap__rng* rng)
  * lambda_out[0] = 0 exactly (DC component).
  * Does NOT require a cheap_ctx.
  */
-static inline int cheap_weights_laplacian(int n, double* lambda_out)
+static inline int cheap_weights_laplacian(int n, double* restrict lambda_out)
 {
     if (n < 2 || !lambda_out) return CHEAP_EINVAL;
     lambda_out[0] = 0.0;
@@ -484,7 +490,8 @@ static inline int cheap_weights_laplacian(int n, double* lambda_out)
  * DC (k=0) sin argument is clamped to CHEAP_EPS_LOG before pow.
  * Does NOT require a cheap_ctx.
  */
-static inline int cheap_weights_fractional(int n, double d, double* weights_out)
+static inline int cheap_weights_fractional(int n, double d,
+                                             double* restrict weights_out)
 {
     if (n < 2 || !weights_out || !isfinite(d)) return CHEAP_EINVAL;
     for (int k = 0; k < n; ++k) {
@@ -503,7 +510,8 @@ static inline int cheap_weights_fractional(int n, double d, double* weights_out)
  * Retains the first K spectral components exactly.
  * K=0 zeroes everything; K=n is the identity.
  */
-static inline int cheap_weights_kpca_hard(int n, int K, double* weights_out)
+static inline int cheap_weights_kpca_hard(int n, int K,
+                                            double* restrict weights_out)
 {
     if (n < 2 || K < 0 || K > n || !weights_out) return CHEAP_EINVAL;
     for (int k = 0; k < K; ++k) weights_out[k] = 1.0;
@@ -521,8 +529,8 @@ static inline int cheap_weights_kpca_hard(int n, int K, double* weights_out)
  * components with lambda[k] ~ lambda[K] get weight ~0.
  * Retains low-frequency (high-variance) components, consistent with PCA.
  */
-static inline int cheap_weights_kpca_soft(const cheap_ctx* ctx, int K,
-                                            double* weights_out)
+static inline int cheap_weights_kpca_soft(const cheap_ctx* restrict ctx, int K,
+                                            double* restrict weights_out)
 {
     if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
     if (K < 0 || K >= ctx->n || !weights_out) return CHEAP_EINVAL;
@@ -547,7 +555,7 @@ static inline int cheap_weights_kpca_soft(const cheap_ctx* ctx, int K,
  * All weights in [0, 1), monotonically non-decreasing in k.
  */
 static inline int cheap_weights_wiener(int n, double sigma_sq,
-                                         double* weights_out)
+                                         double* restrict weights_out)
 {
     if (n < 2 || sigma_sq <= 0.0 || !weights_out) return CHEAP_EINVAL;
     weights_out[0] = 0.0;
@@ -566,9 +574,10 @@ static inline int cheap_weights_wiener(int n, double sigma_sq,
  *
  * Caller provides eigenvalues (Flandrin, Laplacian, or empirical).
  */
-static inline int cheap_weights_wiener_ev(int n, const double* lambda,
+static inline int cheap_weights_wiener_ev(int n,
+                                            const double* restrict lambda,
                                             double sigma_sq,
-                                            double* weights_out)
+                                            double* restrict weights_out)
 {
     if (n < 2 || !lambda || sigma_sq <= 0.0 || !weights_out) return CHEAP_EINVAL;
     for (int k = 0; k < n; ++k) {
@@ -589,7 +598,7 @@ static inline int cheap_weights_wiener_ev(int n, const double* lambda,
  * DC (k=0): weight = 1/sqrt(eps).
  */
 static inline int cheap_weights_specnorm(int n, double eps,
-                                           double* weights_out)
+                                           double* restrict weights_out)
 {
     if (n < 2 || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
     weights_out[0] = 1.0 / sqrt(eps);
@@ -606,9 +615,10 @@ static inline int cheap_weights_specnorm(int n, double eps,
  *
  *   weights_out[k] = 1 / sqrt(lambda[k] + eps)
  */
-static inline int cheap_weights_specnorm_ev(int n, const double* lambda,
+static inline int cheap_weights_specnorm_ev(int n,
+                                              const double* restrict lambda,
                                               double eps,
-                                              double* weights_out)
+                                              double* restrict weights_out)
 {
     if (n < 2 || !lambda || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
     for (int k = 0; k < n; ++k) {
@@ -627,14 +637,15 @@ static inline int cheap_weights_specnorm_ev(int n, const double* lambda,
  * ============================================================ */
 
 static inline void cheap__cmul(double ar, double ai, double br, double bi,
-                                 double* cr, double* ci)
+                                double* restrict cr,
+                                double* restrict ci)
 {
     *cr = ar * br - ai * bi;
     *ci = ar * bi + ai * br;
 }
 
 static inline void cheap__cdiv(double ar, double ai, double br, double bi,
-                                 double* cr, double* ci)
+                                 double* restrict cr, double* restrict ci)
 {
     double d = br * br + bi * bi;
     if (d < CHEAP_EPS_DIV) d = CHEAP_EPS_DIV;
@@ -643,7 +654,7 @@ static inline void cheap__cdiv(double ar, double ai, double br, double bi,
 }
 
 static inline void cheap__clog(double ar, double ai,
-                                 double* cr, double* ci)
+                                 double* restrict cr, double* restrict ci)
 {
     double mag = sqrt(ar * ar + ai * ai);
     if (mag < CHEAP_EPS_DIV) mag = CHEAP_EPS_DIV;
@@ -659,7 +670,8 @@ static inline void cheap__clog(double ar, double ai,
  *   lnGamma(z) = ln(pi / sin(pi*z)) - lnGamma(1 - z)
  */
 static inline void cheap__clgamma(double re, double im,
-                                    double* out_re, double* out_im)
+                                    double* restrict out_re,
+                                    double* restrict out_im)
 {
     static const double g = 7.0;
     static const double c[9] = {
@@ -736,7 +748,7 @@ static inline void cheap__clgamma(double re, double im,
  * Computed in log-space via Lanczos complex log-Gamma.
  */
 static inline int cheap_weights_mandelbrot(int n, double H,
-                                             double* weights_out)
+                                             double* restrict weights_out)
 {
     if (n < 2 || H <= 0.0 || H >= 1.0 || !weights_out) return CHEAP_EINVAL;
 
@@ -767,9 +779,9 @@ static inline int cheap_weights_mandelbrot(int n, double H,
  * Accepts user-provided eigenvalues (any family).
  * c = N/p is the aspect ratio (number of samples / dimension).
  */
-static inline int cheap_weights_rmt_hard(const double* lambda, int n,
+static inline int cheap_weights_rmt_hard(const double* restrict lambda, int n,
                                            double sigma_sq, double c,
-                                           double* weights_out)
+                                           double* restrict weights_out)
 {
     if (n < 2 || !lambda || sigma_sq <= 0.0 || c <= 0.0 || !weights_out)
         return CHEAP_EINVAL;
@@ -793,9 +805,9 @@ static inline int cheap_weights_rmt_hard(const double* lambda, int n,
  * where lp = (1+sqrt(c))^2, lm = (1-sqrt(c))^2.
  * This is the asymptotically optimal Frobenius-norm shrinkage.
  */
-static inline int cheap_weights_rmt_shrink(const double* lambda, int n,
+static inline int cheap_weights_rmt_shrink(const double* restrict lambda, int n,
                                              double sigma_sq, double c,
-                                             double* weights_out)
+                                             double* restrict weights_out)
 {
     if (n < 2 || !lambda || sigma_sq <= 0.0 || c <= 0.0 || !weights_out)
         return CHEAP_EINVAL;
@@ -876,9 +888,9 @@ static inline void cheap_rff_destroy(cheap_rff_ctx* rctx)
     rctx->is_initialized = 0;
 }
 
-static inline int cheap_rff_map(const cheap_rff_ctx* rctx,
-                                   const double* x_in,
-                                   double* z_out)
+static inline int cheap_rff_map(const cheap_rff_ctx* restrict rctx,
+                                   const double* restrict x_in,
+                                   double* restrict z_out)
 {
     if (!rctx || !rctx->is_initialized || !x_in || !z_out) return CHEAP_EINVAL;
     const int M = rctx->D / 2;
@@ -896,10 +908,10 @@ static inline int cheap_rff_map(const cheap_rff_ctx* rctx,
     return CHEAP_OK;
 }
 
-static inline int cheap_rff_map_batch(const cheap_rff_ctx* rctx,
-                                         const double* X_in,
+static inline int cheap_rff_map_batch(const cheap_rff_ctx* restrict rctx,
+                                         const double* restrict X_in,
                                          int N,
-                                         double* Z_out)
+                                         double* restrict Z_out)
 {
     if (!rctx || !X_in || !Z_out || N < 1) return CHEAP_EINVAL;
     const int d = rctx->d_in;

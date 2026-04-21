@@ -290,7 +290,7 @@ static void run_rff_benchmarks(void)
  * Spectral weight constructor benchmarks
  * ========================================================================= */
 
-typedef struct { int n; double* w; } weight_state;
+typedef struct { int n; double* lam; double* w; } weight_state;
 
 static void bench_weights_fractional(void *p) {
     weight_state *s = (weight_state *)p;
@@ -310,17 +310,18 @@ static void bench_weights_mandelbrot(void *p) {
 }
 static void bench_weights_rmt_shrink(void *p) {
     weight_state *s = (weight_state *)p;
-    cheap_weights_rmt_shrink(s->w, s->n, 1.0, 0.5, s->w);
+    cheap_weights_rmt_shrink(s->lam, s->n, 1.0, 0.5, s->w);
 }
 
 static void run_weight_benchmarks(int n)
 {
     weight_state *s = (weight_state *)malloc(sizeof(*s));
     s->n = n;
-    s->w = (double *)fftw_malloc((size_t)n * sizeof(double));
+    s->lam = (double *)fftw_malloc((size_t)n * sizeof(double));
+    s->w   = (double *)fftw_malloc((size_t)n * sizeof(double));
     /* Fill with dummy eigenvalues for RMT */
     for (int i = 0; i < n; ++i)
-        s->w[i] = 1.0 + 5.0 * (double)i / (double)n;
+        s->lam[i] = 1.0 + 5.0 * (double)i / (double)n;
 
     double wms; uint64_t tk;
 
@@ -340,11 +341,11 @@ static void run_weight_benchmarks(int n)
     double sc = sqrt(0.5);
     double lp = (1.0 + sc) * (1.0 + sc);
     for (int i = 0; i < n; ++i)
-        s->w[i] = lp + 1.0 + 5.0 * (double)i / (double)n;
+        s->lam[i] = lp + 1.0 + 5.0 * (double)i / (double)n;
     run_bench(bench_weights_rmt_shrink, s, &wms, &tk);
     print_result("wt_rmt_shrink", n, wms, tk);
 
-    fftw_free(s->w);
+    fftw_free(s->lam); fftw_free(s->w);
     free(s);
 }
 
