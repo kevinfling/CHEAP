@@ -109,6 +109,26 @@
 #endif
 
 /* ============================================================
+ * SIMD dispatch (compile-time)
+ *
+ * We pick at most one SIMD ISA per build based on predefined
+ * compiler macros. Callers can override by defining
+ * CHEAP_SIMD_DISABLE to force the scalar path (useful in tests
+ * that cross-check scalar vs vector results).
+ * ============================================================ */
+#if defined(CHEAP_SIMD_DISABLE)
+#  define CHEAP_SIMD_SCALAR 1
+#elif defined(__AVX2__)
+#  define CHEAP_SIMD_AVX2 1
+#  include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#  define CHEAP_SIMD_NEON 1
+#  include <arm_neon.h>
+#else
+#  define CHEAP_SIMD_SCALAR 1
+#endif
+
+/* ============================================================
  * Portable tick counter
  * ============================================================ */
 
@@ -332,6 +352,55 @@ static inline int cheap_inverse(cheap_ctx* restrict ctx,
  *   - LQR/MPC:     weights[k] = 1 / (lambda[k] + R)
  *   - Frac diff:   weights[k] = (2*sin(omega_k/2))^d
  */
+/*
+ * cheap__mul_inplace — ws[k] *= w[k], vectorized where available.
+ * ws is aligned (ctx->workspace); w may be unaligned (user buffer).
+ */
+static inline void cheap__mul_inplace(double* restrict ws,
+                                        const double* restrict w, int n)
+{
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    for (; k + 4 <= n; k += 4) {
+        __m256d vw = _mm256_loadu_pd(ws + k);
+        __m256d vv = _mm256_loadu_pd(w  + k);
+        _mm256_storeu_pd(ws + k, _mm256_mul_pd(vw, vv));
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    for (; k + 2 <= n; k += 2) {
+        float64x2_t vw = vld1q_f64(ws + k);
+        float64x2_t vv = vld1q_f64(w  + k);
+        vst1q_f64(ws + k, vmulq_f64(vw, vv));
+    }
+#endif
+    for (; k < n; ++k) ws[k] *= w[k];
+}
+
+/*
+ * cheap__scale_copy — output[i] = ws[i] * norm, vectorized where
+ * available. ws is aligned; output may be unaligned.
+ */
+static inline void cheap__scale_copy(double* restrict output,
+                                       const double* restrict ws,
+                                       double norm, int n)
+{
+    int i = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    __m256d vn = _mm256_set1_pd(norm);
+    for (; i + 4 <= n; i += 4) {
+        __m256d vw = _mm256_loadu_pd(ws + i);
+        _mm256_storeu_pd(output + i, _mm256_mul_pd(vw, vn));
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    float64x2_t vn = vdupq_n_f64(norm);
+    for (; i + 2 <= n; i += 2) {
+        float64x2_t vw = vld1q_f64(ws + i);
+        vst1q_f64(output + i, vmulq_f64(vw, vn));
+    }
+#endif
+    for (; i < n; ++i) output[i] = ws[i] * norm;
+}
+
 static inline int cheap_apply(cheap_ctx* restrict ctx,
                                 const double* restrict input,
                                 const double* restrict weights,
@@ -344,9 +413,9 @@ static inline int cheap_apply(cheap_ctx* restrict ctx,
     for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
     memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
     fftw_execute(ctx->plan_fwd);
-    for (int k = 0; k < n; ++k) ctx->workspace[k] *= weights[k];
+    cheap__mul_inplace(ctx->workspace, weights, n);
     fftw_execute(ctx->plan_inv);
-    for (int i = 0; i < n; ++i) output[i] = ctx->workspace[i] * norm;
+    cheap__scale_copy(output, ctx->workspace, norm, n);
     return CHEAP_OK;
 }
 
