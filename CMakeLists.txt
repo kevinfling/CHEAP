@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(CHEAP VERSION 0.1.0 LANGUAGES C)
+project(CHEAP VERSION 0.1.1 LANGUAGES C)
 
 # ---------------------------------------------------------------------------
 # Language standard
@@ -111,9 +111,14 @@ set_tests_properties(simd PROPERTIES TIMEOUT 60)
 add_executable(bench_cheap benchmarks/bench_cheap.c)
 target_link_libraries(bench_cheap PRIVATE cheap)
 target_compile_definitions(bench_cheap PRIVATE _POSIX_C_SOURCE=199309L)
-# -ffast-math only outside sanitizer builds (UBSan flags inf/nan use under fast-math)
+# -ffast-math only outside sanitizer builds (UBSan flags inf/nan use under fast-math).
+# Clang ≥ 22 also warns on isfinite()/INFINITY under -ffast-math; silence since we
+# still want the isfinite guards to compile (they short-circuit on finite inputs).
 if(NOT CMAKE_BUILD_TYPE MATCHES "^(Asan|Ubsan|Tsan)$")
     target_compile_options(bench_cheap PRIVATE -O3 -ffast-math -fopenmp-simd)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        target_compile_options(bench_cheap PRIVATE -Wno-nan-infinity-disabled)
+    endif()
 else()
     target_compile_options(bench_cheap PRIVATE -fopenmp-simd)
 endif()

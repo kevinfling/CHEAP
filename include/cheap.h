@@ -9,12 +9,46 @@
  *
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kevin Fling
+ *
+ * ----------------------------------------------------------------
+ * v0.1.1-metal — hardened release
+ * ----------------------------------------------------------------
+ * Correctness:
+ *   - λ[0] uses the Gupta-Joshi low-frequency asymptotic (no more
+ *     CHEAP_EPS_LAMBDA wart); monotonicity of `lambda[]` is now a
+ *     strict guarantee under default `cheap_init`.
+ *   - `cheap_init_from_toeplitz` accepts a user-supplied first
+ *     column and populates `lambda[]` exactly via DCT-II.
+ *   - `cheap_sinkhorn` is allocation-free on its hot path
+ *     (scratch buffers live in `cheap_ctx`).
+ *   - `restrict` annotations on all non-aliasing pointer params.
+ *   - Runtime contract monitors under `CHEAP_DEBUG_CONTRACTS`;
+ *     zero cost in release.
+ *
+ * SIMD (compile-time dispatch — see CHEAP_SIMD_* below):
+ *   - `cheap_apply`, `cheap_forward`, `cheap_inverse` use SIMD
+ *     pointwise-mul / scale-copy helpers (AVX2: 4×f64, NEON: 2×f64).
+ *   - `cheap_weights_wiener_ev`, `cheap_weights_specnorm_ev`,
+ *     `cheap_weights_rmt_hard`, `cheap_weights_rmt_shrink` are
+ *     fully vectorized.
+ *   - `cheap_weights_mandelbrot` vectorizes the Re(lnΓ) Lanczos
+ *     path on the non-reflection branch.
+ *   - Scalar path always compiles for correctness cross-check.
+ *
+ * API additions (no breaking changes):
+ *   - `cheap_init_from_toeplitz`
+ *   - `cheap_forward_inplace`, `cheap_inverse_inplace`
+ *
+ * Perf (ARM64 Tegra, scalar baseline → NEON, `cheap_apply`):
+ *   ~162 cycles/el → target 18–25 cycles/el. AVX2 target: 8–12.
+ *   See BENCH.md for full before/after tables.
+ * ----------------------------------------------------------------
  */
 
 #define CHEAP_VERSION_MAJOR 0
 #define CHEAP_VERSION_MINOR 1
-#define CHEAP_VERSION_PATCH 0
-#define CHEAP_VERSION "0.1.0"
+#define CHEAP_VERSION_PATCH 1
+#define CHEAP_VERSION "0.1.1-metal"
 
 #include <fftw3.h>
 #include <math.h>
