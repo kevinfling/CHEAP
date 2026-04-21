@@ -276,6 +276,38 @@ static void test_simd_vs_scalar_apply(void)
     }
 }
 
+static void test_apply_inplace_matches_apply(void)
+{
+    int sizes[] = {7, 15, 16, 17, 63, 64, 65, 1024, 4099};
+    for (int si = 0; si < 9; ++si) {
+        int n = sizes[si];
+        cheap_ctx ctx = {0};
+        ASSERT_TRUE(cheap_init(&ctx, n, 0.6) == CHEAP_OK);
+
+        double *in      = (double *)fftw_malloc((size_t)n * sizeof(double));
+        double *w       = (double *)fftw_malloc((size_t)n * sizeof(double));
+        double *o_norm  = (double *)fftw_malloc((size_t)n * sizeof(double));
+
+        for (int i = 0; i < n; ++i) {
+            in[i] = sin(3.1 * i + 0.7) + 0.5 * cos(0.2 * i);
+            w[i]  = 0.3 + 0.7 * cos(0.11 * i);
+        }
+
+        /* Reference: cheap_apply into o_norm. */
+        ASSERT_TRUE(cheap_apply(&ctx, in, w, o_norm) == CHEAP_OK);
+
+        /* In-place twin: populate workspace, run apply_inplace, read back. */
+        memcpy(ctx.workspace, in, (size_t)n * sizeof(double));
+        ASSERT_TRUE(cheap_apply_inplace(&ctx, w) == CHEAP_OK);
+
+        double d = max_abs_diff(o_norm, ctx.workspace, n);
+        ASSERT_TRUE(d < SIMD_TOL);
+
+        fftw_free(in); fftw_free(w); fftw_free(o_norm);
+        cheap_destroy(&ctx);
+    }
+}
+
 static void test_simd_vs_scalar_wiener_ev(void)
 {
     int sizes[] = {7, 16, 17, 64, 65, 1024};
@@ -351,6 +383,7 @@ int main(void)
     test_weight_monotonicity();           printf("  test_weight_monotonicity\n");
     test_sinkhorn_gaussian();             printf("  test_sinkhorn_gaussian\n");
     test_simd_vs_scalar_apply();          printf("  test_simd_vs_scalar_apply\n");
+    test_apply_inplace_matches_apply();   printf("  test_apply_inplace_matches_apply\n");
     test_simd_vs_scalar_wiener_ev();      printf("  test_simd_vs_scalar_wiener_ev\n");
     test_simd_vs_scalar_specnorm_ev();    printf("  test_simd_vs_scalar_specnorm_ev\n");
     test_simd_vs_scalar_rmt();            printf("  test_simd_vs_scalar_rmt\n");

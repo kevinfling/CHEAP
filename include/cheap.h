@@ -37,7 +37,8 @@
  *
  * API additions (no breaking changes):
  *   - `cheap_init_from_toeplitz`
- *   - `cheap_forward_inplace`, `cheap_inverse_inplace`
+ *   - `cheap_apply_inplace`, `cheap_forward_inplace`,
+ *     `cheap_inverse_inplace`
  *
  * Perf (ARM64 Tegra, scalar baseline → NEON, `cheap_apply`):
  *   ~162 cycles/el → target 18–25 cycles/el. AVX2 target: 8–12.
@@ -480,6 +481,27 @@ static inline int cheap_apply(cheap_ctx* restrict ctx,
     cheap__mul_inplace(ctx->workspace, weights, n);
     fftw_execute(ctx->plan_inv);
     cheap__scale_copy(output, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_apply_inplace — in-place twin of cheap_apply.
+ * Operates entirely on ctx->workspace: caller populates it first
+ * (e.g. via cheap_workspace(ctx)), then reads the result from the
+ * same buffer. Skips the input memcpy and isfinite sweep — caller
+ * must guarantee finiteness. AVX2/NEON accelerated.
+ */
+static inline int cheap_apply_inplace(cheap_ctx* restrict ctx,
+                                      const double* restrict weights)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!weights) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (2.0 * (double)n);
+    fftw_execute(ctx->plan_fwd);
+    cheap__mul_inplace(ctx->workspace, weights, n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(ctx->workspace, ctx->workspace, norm, n);
     return CHEAP_OK;
 }
 

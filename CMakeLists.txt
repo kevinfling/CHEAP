@@ -108,19 +108,31 @@ set_tests_properties(simd PROPERTIES TIMEOUT 60)
 # ---------------------------------------------------------------------------
 # Benchmarks (built but NOT registered with CTest)
 # ---------------------------------------------------------------------------
+# Native benchmark (SIMD path via CHEAP_SIMD_* macros — NEON/AVX2/scalar fallback)
 add_executable(bench_cheap benchmarks/bench_cheap.c)
 target_link_libraries(bench_cheap PRIVATE cheap)
 target_compile_definitions(bench_cheap PRIVATE _POSIX_C_SOURCE=199309L)
+
+# Scalar twin: identical code compiled with CHEAP_SIMD_DISABLE so the pointwise-mul
+# and scale-copy helpers fall back to their scalar implementations. Same optimizer
+# flags as the native build so we're measuring SIMD vs scalar, not opt level.
+add_executable(bench_cheap_scalar benchmarks/bench_cheap.c)
+target_link_libraries(bench_cheap_scalar PRIVATE cheap)
+target_compile_definitions(bench_cheap_scalar PRIVATE _POSIX_C_SOURCE=199309L CHEAP_SIMD_DISABLE=1)
+
 # -ffast-math only outside sanitizer builds (UBSan flags inf/nan use under fast-math).
 # Clang ≥ 22 also warns on isfinite()/INFINITY under -ffast-math; silence since we
 # still want the isfinite guards to compile (they short-circuit on finite inputs).
 if(NOT CMAKE_BUILD_TYPE MATCHES "^(Asan|Ubsan|Tsan)$")
     target_compile_options(bench_cheap PRIVATE -O3 -ffast-math -fopenmp-simd)
+    target_compile_options(bench_cheap_scalar PRIVATE -O3 -ffast-math -fopenmp-simd)
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         target_compile_options(bench_cheap PRIVATE -Wno-nan-infinity-disabled)
+        target_compile_options(bench_cheap_scalar PRIVATE -Wno-nan-infinity-disabled)
     endif()
 else()
     target_compile_options(bench_cheap PRIVATE -fopenmp-simd)
+    target_compile_options(bench_cheap_scalar PRIVATE -fopenmp-simd)
 endif()
 
 # Statistical benchmark (FFTW_PATIENT with repeated trials)

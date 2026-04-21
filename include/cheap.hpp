@@ -138,6 +138,11 @@ public:
         return out;
     }
 
+    void apply_inplace(const double* weights) { detail::check(try_apply_inplace(weights)); }
+    int try_apply_inplace(const double* weights) noexcept {
+        return cheap_apply_inplace(&ctx_, weights);
+    }
+
     /* --- Sinkhorn optimal transport --- */
 
     void recompute_gibbs(double eps) { detail::check(try_recompute_gibbs(eps)); }
@@ -219,6 +224,11 @@ public:
             static_cast<int>(weights.size()) != ctx_.n)
             throw Error(CHEAP_EINVAL);
         return apply(input.data(), weights.data());
+    }
+
+    void apply_inplace(std::span<const double> weights) {
+        if (static_cast<int>(weights.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        apply_inplace(weights.data());
     }
 
     int sinkhorn(std::span<const double> a, std::span<const double> b,

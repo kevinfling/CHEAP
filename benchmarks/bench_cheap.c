@@ -153,6 +153,18 @@ static void bench_apply(void *p) {
     cheap_apply(&s->ctx, s->input, s->weights, s->output);
 }
 
+typedef struct { cheap_ctx ctx; double *input; double *weights; } apply_inplace_state;
+static void bench_apply_inplace(void *p) {
+    apply_inplace_state *s = (apply_inplace_state *)p;
+    /* Re-seed workspace each iter so the measurement is independent of prior
+     * iterations' output (cheap_apply_inplace overwrites workspace). The memcpy
+     * matches the one baked into cheap_apply — this is a fair apples-to-apples
+     * comparison against "apply_krr" above, isolating the SIMD kernel + elimination
+     * of the final scale-copy pass. */
+    memcpy(s->ctx.workspace, s->input, (size_t)s->ctx.n * sizeof(double));
+    cheap_apply_inplace(&s->ctx, s->weights);
+}
+
 typedef struct { cheap_ctx ctx; double *input; double *output; } fwd_inv_state;
 static void bench_forward(void *p) {
     fwd_inv_state *s = (fwd_inv_state *)p;
@@ -225,6 +237,20 @@ static void run_core_benchmarks(int n)
         print_result("apply_krr", n, &st);
         cheap_destroy(&s->ctx);
         fftw_free(s->input); fftw_free(s->weights); fftw_free(s->output); free(s);
+    }
+    /* cheap_apply_inplace with KRR weights (same workload as apply_krr) */
+    {
+        apply_inplace_state *s = (apply_inplace_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init(&s->ctx, n, H));
+        s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
+        for (int k = 0; k < n; ++k) s->weights[k] = 1.0 / (s->ctx.lambda[k] + 1e-3);
+        bench_stats st;
+        run_bench(bench_apply_inplace, s, n, &st);
+        print_result("apply_krr_inplace", n, &st);
+        cheap_destroy(&s->ctx);
+        fftw_free(s->input); fftw_free(s->weights); free(s);
     }
     /* cheap_apply with sqrt_lambda (reparam) */
     {
