@@ -47,6 +47,68 @@
 #define CHEAP_EPS_LAMBDA  1e-15
 
 /* ============================================================
+ * Alignment
+ *
+ * CHEAP hot buffers come from fftw_malloc. FFTW guarantees at
+ * least SIMD_ALIGNMENT bytes — empirically 16 on AArch64 (Tegra
+ * ARMv8 observed) and on non-AVX x86-64. This satisfies NEON
+ * (`vld1q_f64` wants 16B). For AVX2 (`_mm256_load_pd` wants
+ * 32B) we fall back to unaligned loads (`_mm256_loadu_pd`),
+ * which modern Intel/AMD execute at the same rate as aligned
+ * loads when the address happens to be 32-byte aligned.
+ * AVX-512 is explicitly out of scope for v0.1.1.
+ *
+ * CHEAP_ASSUME_ALIGNED(p, a) — tell the compiler the pointer is
+ * a-byte aligned so it can emit aligned loads/stores directly.
+ * No-op on compilers that don't support the builtin.
+ *
+ * CHEAP_ALIGNMENT is the minimum guaranteed alignment for hot
+ * buffers; used only for debug-contract assertions.
+ * ============================================================ */
+
+#define CHEAP_ALIGNMENT 16
+
+#if defined(__GNUC__) || defined(__clang__)
+#  define CHEAP_ASSUME_ALIGNED(p, a) ((__typeof__(p))__builtin_assume_aligned((p), (a)))
+#else
+#  define CHEAP_ASSUME_ALIGNED(p, a) (p)
+#endif
+
+#ifdef CHEAP_DEBUG_CONTRACTS
+#  include <assert.h>
+#  define CHEAP_ASSERT_ALIGNED(p) \
+    assert(((uintptr_t)(p) & (CHEAP_ALIGNMENT - 1)) == 0)
+#else
+#  define CHEAP_ASSERT_ALIGNED(p) ((void)0)
+#endif
+
+/* ============================================================
+ * Runtime contract monitors (CHEAP_DEBUG_CONTRACTS)
+ *
+ * Verifiable math invariants that fire in debug builds only.
+ * Zero cost in release. Library code: never traps — returns
+ * CHEAP_EDOM up the stack so callers can recover.
+ * ============================================================ */
+#ifdef CHEAP_DEBUG_CONTRACTS
+#  define CHEAP_CONTRACT_FINITE_OR_EDOM(arr, len) \
+    do { for (int _i = 0; _i < (len); ++_i) \
+         if (!isfinite((arr)[_i])) return CHEAP_EDOM; } while (0)
+#  define CHEAP_CONTRACT_STRICT_DEC_OR_EDOM(arr, len) \
+    do { for (int _i = 1; _i < (len); ++_i) \
+         if ((arr)[_i] >= (arr)[_i-1]) return CHEAP_EDOM; } while (0)
+#  define CHEAP_CONTRACT_NONDEC_OR_EDOM(arr, len) \
+    do { for (int _i = 1; _i < (len); ++_i) \
+         if ((arr)[_i] < (arr)[_i-1]) return CHEAP_EDOM; } while (0)
+#  define CHEAP_CONTRACT_NEAR_OR_EDOM(val, target, tol) \
+    do { if (fabs((val) - (target)) > (tol)) return CHEAP_EDOM; } while (0)
+#else
+#  define CHEAP_CONTRACT_FINITE_OR_EDOM(arr, len)         ((void)0)
+#  define CHEAP_CONTRACT_STRICT_DEC_OR_EDOM(arr, len)     ((void)0)
+#  define CHEAP_CONTRACT_NONDEC_OR_EDOM(arr, len)         ((void)0)
+#  define CHEAP_CONTRACT_NEAR_OR_EDOM(val, target, tol)   ((void)0)
+#endif
+
+/* ============================================================
  * Portable tick counter
  * ============================================================ */
 
@@ -127,6 +189,13 @@ static inline int cheap__alloc_ctx(cheap_ctx* ctx, int n)
         cheap_destroy(ctx);
         return CHEAP_ENOMEM;
     }
+    CHEAP_ASSERT_ALIGNED(ctx->lambda);
+    CHEAP_ASSERT_ALIGNED(ctx->gibbs);
+    CHEAP_ASSERT_ALIGNED(ctx->sqrt_lambda);
+    CHEAP_ASSERT_ALIGNED(ctx->workspace);
+    CHEAP_ASSERT_ALIGNED(ctx->scratch1);
+    CHEAP_ASSERT_ALIGNED(ctx->scratch2);
+    CHEAP_ASSERT_ALIGNED(ctx->prev_g);
     ctx->plan_fwd = fftw_plan_r2r_1d(n, ctx->workspace, ctx->workspace,
                                       FFTW_REDFT10, FFTW_PATIENT);
     ctx->plan_inv = fftw_plan_r2r_1d(n, ctx->workspace, ctx->workspace,
@@ -181,6 +250,8 @@ static inline int cheap_init(cheap_ctx* ctx, int n, double H)
         /* n == 2: no second tail point; fall back to doubling lambda[1]. */
         ctx->lambda[0] = 2.0 * ctx->lambda[1];
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, n);
+    CHEAP_CONTRACT_STRICT_DEC_OR_EDOM(ctx->lambda, n);
     cheap__finalize_sqrt_lambda(ctx);
     return CHEAP_OK;
 }
@@ -208,6 +279,7 @@ static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
     memcpy(ctx->workspace, t, (size_t)n * sizeof(double));
     fftw_execute(ctx->plan_fwd);
     memcpy(ctx->lambda, ctx->workspace, (size_t)n * sizeof(double));
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, n);
     cheap__finalize_sqrt_lambda(ctx);
     return CHEAP_OK;
 }
@@ -477,6 +549,8 @@ static inline int cheap_weights_laplacian(int n, double* restrict lambda_out)
         double s = sin(M_PI * (double)k / (2.0 * (double)n));
         lambda_out[k] = 4.0 * s * s;
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(lambda_out, n);
+    CHEAP_CONTRACT_NONDEC_OR_EDOM(lambda_out, n);
     return CHEAP_OK;
 }
 
@@ -499,6 +573,7 @@ static inline int cheap_weights_fractional(int n, double d,
         if (s < CHEAP_EPS_LOG) s = CHEAP_EPS_LOG;
         weights_out[k] = pow(2.0 * s, d);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -542,6 +617,7 @@ static inline int cheap_weights_kpca_soft(const cheap_ctx* restrict ctx, int K,
         else
             weights_out[k] = fmax(0.0, 1.0 - threshold / ctx->lambda[k]);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -564,6 +640,8 @@ static inline int cheap_weights_wiener(int n, double sigma_sq,
         double lk = 4.0 * s * s;
         weights_out[k] = lk / (lk + sigma_sq);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    CHEAP_CONTRACT_NONDEC_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -585,6 +663,7 @@ static inline int cheap_weights_wiener_ev(int n,
         double lk = fmax(lambda[k], 0.0);
         weights_out[k] = lk / (lk + sigma_sq);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -607,6 +686,7 @@ static inline int cheap_weights_specnorm(int n, double eps,
         double lk = 4.0 * s * s;
         weights_out[k] = 1.0 / sqrt(lk + eps);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -626,6 +706,7 @@ static inline int cheap_weights_specnorm_ev(int n,
         double lk = fmax(lambda[k], 0.0);
         weights_out[k] = 1.0 / sqrt(lk + eps);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -763,6 +844,17 @@ static inline int cheap_weights_mandelbrot(int n, double H,
         cheap__clgamma(1.0 - H, tau, &lg_den_re, &lg_den_im);
         weights_out[k] = exp(lg_num_re - lg_den_re);
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    /*
+     * H == 0.5 identity: |Gamma(0.5+it)/Gamma(0.5+it)| = 1 exactly.
+     * Any drift here is a numerical bug in the Lanczos path.
+     */
+#ifdef CHEAP_DEBUG_CONTRACTS
+    if (fabs(H - 0.5) < 1e-15) {
+        for (int k = 0; k < n; ++k)
+            if (fabs(weights_out[k] - 1.0) > 1e-12) return CHEAP_EDOM;
+    }
+#endif
     return CHEAP_OK;
 }
 
@@ -791,6 +883,7 @@ static inline int cheap_weights_rmt_hard(const double* restrict lambda, int n,
         if (!isfinite(lambda[k])) return CHEAP_EDOM;
         weights_out[k] = (lambda[k] > lambda_plus) ? lambda[k] : 0.0;
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
@@ -825,6 +918,7 @@ static inline int cheap_weights_rmt_shrink(const double* restrict lambda, int n,
             weights_out[k] = lambda[k] * factor / l;
         }
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
 
