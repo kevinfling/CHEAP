@@ -90,6 +90,12 @@ target_compile_definitions(test_cheap PRIVATE _POSIX_C_SOURCE=199309L)
 add_test(NAME unit COMMAND test_cheap)
 set_tests_properties(unit PROPERTIES TIMEOUT 60)
 
+add_executable(test_simd tests/test_simd.c)
+target_link_libraries(test_simd PRIVATE cheap)
+target_compile_definitions(test_simd PRIVATE _POSIX_C_SOURCE=199309L)
+add_test(NAME simd COMMAND test_simd)
+set_tests_properties(simd PROPERTIES TIMEOUT 60)
+
 # ---------------------------------------------------------------------------
 # Benchmarks (built but NOT registered with CTest)
 # ---------------------------------------------------------------------------
