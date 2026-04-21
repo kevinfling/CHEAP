@@ -976,12 +976,31 @@ static inline int cheap_weights_rmt_hard(const double* restrict lambda, int n,
 {
     if (n < 2 || !lambda || sigma_sq <= 0.0 || c <= 0.0 || !weights_out)
         return CHEAP_EINVAL;
-    double sc = sqrt(c);
-    double lambda_plus = sigma_sq * (1.0 + sc) * (1.0 + sc);
-    for (int k = 0; k < n; ++k) {
+    for (int k = 0; k < n; ++k)
         if (!isfinite(lambda[k])) return CHEAP_EDOM;
-        weights_out[k] = (lambda[k] > lambda_plus) ? lambda[k] : 0.0;
+    const double sc = sqrt(c);
+    const double lambda_plus = sigma_sq * (1.0 + sc) * (1.0 + sc);
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    __m256d vth = _mm256_set1_pd(lambda_plus);
+    __m256d vz  = _mm256_setzero_pd();
+    for (; k + 4 <= n; k += 4) {
+        __m256d vl = _mm256_loadu_pd(lambda + k);
+        /* mask = lambda > lambda_plus */
+        __m256d mask = _mm256_cmp_pd(vl, vth, _CMP_GT_OQ);
+        _mm256_storeu_pd(weights_out + k, _mm256_blendv_pd(vz, vl, mask));
     }
+#elif defined(CHEAP_SIMD_NEON)
+    float64x2_t vth = vdupq_n_f64(lambda_plus);
+    float64x2_t vz  = vdupq_n_f64(0.0);
+    for (; k + 2 <= n; k += 2) {
+        float64x2_t vl = vld1q_f64(lambda + k);
+        uint64x2_t mask = vcgtq_f64(vl, vth);
+        vst1q_f64(weights_out + k, vbslq_f64(mask, vl, vz));
+    }
+#endif
+    for (; k < n; ++k)
+        weights_out[k] = (lambda[k] > lambda_plus) ? lambda[k] : 0.0;
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }
@@ -1003,16 +1022,60 @@ static inline int cheap_weights_rmt_shrink(const double* restrict lambda, int n,
 {
     if (n < 2 || !lambda || sigma_sq <= 0.0 || c <= 0.0 || !weights_out)
         return CHEAP_EINVAL;
-    double sc = sqrt(c);
-    double lp = (1.0 + sc) * (1.0 + sc);
-    double lm = (1.0 - sc) * (1.0 - sc);
-    double lambda_plus = sigma_sq * lp;
-    for (int k = 0; k < n; ++k) {
+    for (int k = 0; k < n; ++k)
         if (!isfinite(lambda[k])) return CHEAP_EDOM;
+    const double sc = sqrt(c);
+    const double lp = (1.0 + sc) * (1.0 + sc);
+    const double lm = (1.0 - sc) * (1.0 - sc);
+    const double lambda_plus = sigma_sq * lp;
+    const double inv_sigma_sq = 1.0 / sigma_sq;
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vth  = _mm256_set1_pd(lambda_plus);
+        __m256d vz   = _mm256_setzero_pd();
+        __m256d visg = _mm256_set1_pd(inv_sigma_sq);
+        __m256d vlp  = _mm256_set1_pd(lp);
+        __m256d vlm  = _mm256_set1_pd(lm);
+        for (; k + 4 <= n; k += 4) {
+            __m256d vl   = _mm256_loadu_pd(lambda + k);
+            __m256d mask = _mm256_cmp_pd(vl, vth, _CMP_GT_OQ);
+            __m256d vx   = _mm256_mul_pd(vl, visg);            /* l = lambda/sigma_sq */
+            __m256d a    = _mm256_sub_pd(vx, vlp);
+            __m256d b    = _mm256_sub_pd(vx, vlm);
+            __m256d prod = _mm256_mul_pd(a, b);
+            prod = _mm256_max_pd(prod, vz);                     /* fmax(0, ...) */
+            __m256d fac  = _mm256_sqrt_pd(prod);
+            __m256d res  = _mm256_div_pd(_mm256_mul_pd(vl, fac), vx); /* lambda*fac/l */
+            _mm256_storeu_pd(weights_out + k, _mm256_blendv_pd(vz, res, mask));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vth  = vdupq_n_f64(lambda_plus);
+        float64x2_t vz   = vdupq_n_f64(0.0);
+        float64x2_t visg = vdupq_n_f64(inv_sigma_sq);
+        float64x2_t vlp  = vdupq_n_f64(lp);
+        float64x2_t vlm  = vdupq_n_f64(lm);
+        for (; k + 2 <= n; k += 2) {
+            float64x2_t vl   = vld1q_f64(lambda + k);
+            uint64x2_t  mask = vcgtq_f64(vl, vth);
+            float64x2_t vx   = vmulq_f64(vl, visg);
+            float64x2_t a    = vsubq_f64(vx, vlp);
+            float64x2_t b    = vsubq_f64(vx, vlm);
+            float64x2_t prod = vmulq_f64(a, b);
+            prod = vmaxq_f64(prod, vz);
+            float64x2_t fac  = vsqrtq_f64(prod);
+            float64x2_t res  = vdivq_f64(vmulq_f64(vl, fac), vx);
+            vst1q_f64(weights_out + k, vbslq_f64(mask, res, vz));
+        }
+    }
+#endif
+    for (; k < n; ++k) {
         if (lambda[k] <= lambda_plus) {
             weights_out[k] = 0.0;
         } else {
-            double l = lambda[k] / sigma_sq;
+            double l = lambda[k] * inv_sigma_sq;
             double factor = sqrt(fmax(0.0, (l - lp) * (l - lm)));
             weights_out[k] = lambda[k] * factor / l;
         }
