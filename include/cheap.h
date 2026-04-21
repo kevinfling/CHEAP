@@ -757,8 +757,33 @@ static inline int cheap_weights_wiener_ev(int n,
                                             double* restrict weights_out)
 {
     if (n < 2 || !lambda || sigma_sq <= 0.0 || !weights_out) return CHEAP_EINVAL;
-    for (int k = 0; k < n; ++k) {
+    for (int k = 0; k < n; ++k)
         if (!isfinite(lambda[k])) return CHEAP_EDOM;
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vss = _mm256_set1_pd(sigma_sq);
+        __m256d vz  = _mm256_setzero_pd();
+        for (; k + 4 <= n; k += 4) {
+            __m256d vl = _mm256_loadu_pd(lambda + k);
+            vl = _mm256_max_pd(vl, vz);
+            __m256d denom = _mm256_add_pd(vl, vss);
+            _mm256_storeu_pd(weights_out + k, _mm256_div_pd(vl, denom));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vss = vdupq_n_f64(sigma_sq);
+        float64x2_t vz  = vdupq_n_f64(0.0);
+        for (; k + 2 <= n; k += 2) {
+            float64x2_t vl = vld1q_f64(lambda + k);
+            vl = vmaxq_f64(vl, vz);
+            float64x2_t denom = vaddq_f64(vl, vss);
+            vst1q_f64(weights_out + k, vdivq_f64(vl, denom));
+        }
+    }
+#endif
+    for (; k < n; ++k) {
         double lk = fmax(lambda[k], 0.0);
         weights_out[k] = lk / (lk + sigma_sq);
     }
@@ -800,8 +825,35 @@ static inline int cheap_weights_specnorm_ev(int n,
                                               double* restrict weights_out)
 {
     if (n < 2 || !lambda || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
-    for (int k = 0; k < n; ++k) {
+    for (int k = 0; k < n; ++k)
         if (!isfinite(lambda[k])) return CHEAP_EDOM;
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d veps = _mm256_set1_pd(eps);
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d vz   = _mm256_setzero_pd();
+        for (; k + 4 <= n; k += 4) {
+            __m256d vl = _mm256_loadu_pd(lambda + k);
+            vl = _mm256_max_pd(vl, vz);
+            __m256d s  = _mm256_sqrt_pd(_mm256_add_pd(vl, veps));
+            _mm256_storeu_pd(weights_out + k, _mm256_div_pd(vone, s));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t veps = vdupq_n_f64(eps);
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t vz   = vdupq_n_f64(0.0);
+        for (; k + 2 <= n; k += 2) {
+            float64x2_t vl = vld1q_f64(lambda + k);
+            vl = vmaxq_f64(vl, vz);
+            float64x2_t s  = vsqrtq_f64(vaddq_f64(vl, veps));
+            vst1q_f64(weights_out + k, vdivq_f64(vone, s));
+        }
+    }
+#endif
+    for (; k < n; ++k) {
         double lk = fmax(lambda[k], 0.0);
         weights_out[k] = 1.0 / sqrt(lk + eps);
     }
