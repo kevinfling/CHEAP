@@ -45,8 +45,8 @@ static double wall_seconds(void)
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
-#define WARMUP_ITERS  3
-#define BENCH_ITERS  10
+#define WARMUP_ITERS  10
+#define BENCH_ITERS   1000
 
 #define CHECK_RC(expr) do { \
     int _rc = (expr); \
@@ -56,24 +56,91 @@ static double wall_seconds(void)
     } \
 } while (0)
 
-static void run_bench(void (*bench_fn)(void *), void *state,
-                      double *out_wall_ms, uint64_t *out_ticks)
+typedef struct {
+    double   wall_ms_min, wall_ms_median, wall_ms_mean, wall_ms_stddev;
+    uint64_t ticks_min, ticks_median;
+    double   ticks_mean;
+    double   cycles_per_el;   /* ticks_median / n */
+} bench_stats;
+
+static int cmp_u64(const void *a, const void *b)
 {
-    for (int i = 0; i < WARMUP_ITERS; ++i) bench_fn(state);
-    double  t0 = wall_seconds();
-    uint64_t c0 = bench_ticks();
-    for (int i = 0; i < BENCH_ITERS; ++i) bench_fn(state);
-    uint64_t c1 = bench_ticks();
-    double  t1 = wall_seconds();
-    *out_wall_ms = (t1 - t0) * 1e3 / BENCH_ITERS;
-    *out_ticks   = (c1 - c0) / (uint64_t)BENCH_ITERS;
+    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+    return (x > y) - (x < y);
 }
 
-static void print_result(const char *algo, int n,
-                         double wall_ms, uint64_t ticks)
+static int cmp_dbl(const void *a, const void *b)
 {
-    printf("%-24s %6d   %10.6f   %12" PRIu64 "\n",
-           algo, n, wall_ms, ticks);
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+static void run_bench(void (*bench_fn)(void *), void *state, int n,
+                      bench_stats *out)
+{
+    static double   wall_samples[BENCH_ITERS];
+    static uint64_t tick_samples[BENCH_ITERS];
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) bench_fn(state);
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        uint64_t c0 = bench_ticks();
+        double   t0 = wall_seconds();
+        bench_fn(state);
+        double   t1 = wall_seconds();
+        uint64_t c1 = bench_ticks();
+        wall_samples[i] = (t1 - t0) * 1e3;
+        tick_samples[i] = c1 - c0;
+    }
+
+    /* Mean + stddev (uses full sample) */
+    double sum = 0.0;
+    double tick_sum = 0.0;
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        sum      += wall_samples[i];
+        tick_sum += (double)tick_samples[i];
+    }
+    double mean = sum / (double)BENCH_ITERS;
+    double var = 0.0;
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        double d = wall_samples[i] - mean;
+        var += d * d;
+    }
+    var /= (double)(BENCH_ITERS - 1);
+
+    /* Sort for min + median (uses scratch copies) */
+    static double   wall_sorted[BENCH_ITERS];
+    static uint64_t tick_sorted[BENCH_ITERS];
+    memcpy(wall_sorted, wall_samples, sizeof(wall_samples));
+    memcpy(tick_sorted, tick_samples, sizeof(tick_samples));
+    qsort(wall_sorted, BENCH_ITERS, sizeof(double),   cmp_dbl);
+    qsort(tick_sorted, BENCH_ITERS, sizeof(uint64_t), cmp_u64);
+
+    out->wall_ms_min    = wall_sorted[0];
+    out->wall_ms_median = wall_sorted[BENCH_ITERS / 2];
+    out->wall_ms_mean   = mean;
+    out->wall_ms_stddev = sqrt(var);
+    out->ticks_min      = tick_sorted[0];
+    out->ticks_median   = tick_sorted[BENCH_ITERS / 2];
+    out->ticks_mean     = tick_sum / (double)BENCH_ITERS;
+    out->cycles_per_el  = (double)out->ticks_median / (double)n;
+}
+
+static void print_header(void)
+{
+    printf("# %-22s %6s   %10s %10s %10s %10s   %12s %12s   %10s\n",
+           "algo", "N",
+           "wall_min", "wall_med", "wall_mean", "wall_stdd",
+           "tick_min", "tick_med",
+           "cyc/el");
+}
+
+static void print_result(const char *algo, int n, const bench_stats *s)
+{
+    printf("%-24s %6d   %10.6f %10.6f %10.6f %10.6f   %12" PRIu64 " %12" PRIu64 "   %10.2f\n",
+           algo, n,
+           s->wall_ms_min, s->wall_ms_median, s->wall_ms_mean, s->wall_ms_stddev,
+           s->ticks_min, s->ticks_median,
+           s->cycles_per_el);
 }
 
 /* =========================================================================
@@ -153,9 +220,9 @@ static void run_core_benchmarks(int n)
             double denom = s->ctx.lambda[k] + 1e-3;
             s->weights[k] = 1.0 / denom;
         }
-        double wms; uint64_t tk;
-        run_bench(bench_apply, s, &wms, &tk);
-        print_result("apply_krr", n, wms, tk);
+        bench_stats st;
+        run_bench(bench_apply, s, n, &st);
+        print_result("apply_krr", n, &st);
         cheap_destroy(&s->ctx);
         fftw_free(s->input); fftw_free(s->weights); fftw_free(s->output); free(s);
     }
@@ -167,9 +234,9 @@ static void run_core_benchmarks(int n)
         s->weights = s->ctx.sqrt_lambda;  /* borrow — don't free */
         s->output  = (double *)fftw_malloc((size_t)n * sizeof(double));
         for (int i = 0; i < n; ++i) s->input[i] = 1.0;
-        double wms; uint64_t tk;
-        run_bench(bench_apply, s, &wms, &tk);
-        print_result("apply_reparam", n, wms, tk);
+        bench_stats st;
+        run_bench(bench_apply, s, n, &st);
+        print_result("apply_reparam", n, &st);
         cheap_destroy(&s->ctx);
         fftw_free(s->input); fftw_free(s->output); free(s);
     }
@@ -180,9 +247,9 @@ static void run_core_benchmarks(int n)
         s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
         s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
         for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
-        double wms; uint64_t tk;
-        run_bench(bench_forward, s, &wms, &tk);
-        print_result("forward", n, wms, tk);
+        bench_stats st;
+        run_bench(bench_forward, s, n, &st);
+        print_result("forward", n, &st);
         cheap_destroy(&s->ctx);
         fftw_free(s->input); fftw_free(s->output); free(s);
     }
@@ -194,9 +261,9 @@ static void run_core_benchmarks(int n)
         s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
         for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
         cheap_forward(&s->ctx, s->input);
-        double wms; uint64_t tk;
-        run_bench(bench_inverse, s, &wms, &tk);
-        print_result("inverse", n, wms, tk);
+        bench_stats st;
+        run_bench(bench_inverse, s, n, &st);
+        print_result("inverse", n, &st);
         cheap_destroy(&s->ctx);
         fftw_free(s->input); fftw_free(s->output); free(s);
     }
@@ -209,9 +276,9 @@ static void run_core_benchmarks(int n)
         s->g = (double *)fftw_malloc((size_t)n * sizeof(double));
         CHECK_RC(cheap_init(&s->ctx, n, H));
         for (int i = 0; i < n; ++i) s->a[i] = s->b[i] = 1.0 / (double)n;
-        double wms; uint64_t tk;
-        run_bench(bench_sinkhorn, s, &wms, &tk);
-        print_result("sinkhorn_50", n, wms, tk);
+        bench_stats st;
+        run_bench(bench_sinkhorn, s, n, &st);
+        print_result("sinkhorn_50", n, &st);
         cheap_destroy(&s->ctx);
         fftw_free(s->a); fftw_free(s->b); fftw_free(s->f); fftw_free(s->g);
         free(s);
@@ -233,13 +300,13 @@ static void run_toeplitz_benchmarks(int n)
     for (int i = 0; i < n; ++i) s->x[i] = sin(2.0 * M_PI * i / n) + 1.0;
     cheap_toeplitz_eigenvalues(&s->ctx, t, s->lam);
 
-    double wms; uint64_t tk;
+    bench_stats st;
 
-    run_bench(bench_toeplitz_matvec_pre, s, &wms, &tk);
-    print_result("toeplitz_matvec_pre", n, wms, tk);
+    run_bench(bench_toeplitz_matvec_pre, s, n, &st);
+    print_result("toeplitz_matvec_pre", n, &st);
 
-    run_bench(bench_toeplitz_solve, s, &wms, &tk);
-    print_result("toeplitz_solve_pre", n, wms, tk);
+    run_bench(bench_toeplitz_solve, s, n, &st);
+    print_result("toeplitz_solve_pre", n, &st);
 
     cheap_destroy(&s->ctx);
     free(t); fftw_free(s->lam); fftw_free(s->x); fftw_free(s->y);
@@ -249,7 +316,7 @@ static void run_toeplitz_benchmarks(int n)
 static void run_rff_benchmarks(void)
 {
     int D_vals[] = {64, 256, 1024};
-    double wms; uint64_t tk;
+    bench_stats st;
 
     for (int di = 0; di < 3; ++di) {
         int D = D_vals[di];
@@ -259,8 +326,8 @@ static void run_rff_benchmarks(void)
         s->z_out = (double *)malloc((size_t)D * sizeof(double));
         s->x_in[0] = 0.5;
 
-        run_bench(bench_rff_map, s, &wms, &tk);
-        print_result("rff_map", D, wms, tk);
+        run_bench(bench_rff_map, s, D, &st);
+        print_result("rff_map", D, &st);
 
         free(s->x_in); free(s->z_out);
         cheap_rff_destroy(&s->rctx);
@@ -277,8 +344,8 @@ static void run_rff_benchmarks(void)
         s->Z_out = (double *)malloc((size_t)(N * 256) * sizeof(double));
         for (int i = 0; i < N; ++i) s->X_in[i] = (double)i * 0.001;
 
-        run_bench(bench_rff_map_batch, s, &wms, &tk);
-        print_result("rff_map_batch_256", N, wms, tk);
+        run_bench(bench_rff_map_batch, s, N, &st);
+        print_result("rff_map_batch_256", N, &st);
 
         free(s->X_in); free(s->Z_out);
         cheap_rff_destroy(&s->rctx);
@@ -323,27 +390,27 @@ static void run_weight_benchmarks(int n)
     for (int i = 0; i < n; ++i)
         s->lam[i] = 1.0 + 5.0 * (double)i / (double)n;
 
-    double wms; uint64_t tk;
+    bench_stats st;
 
-    run_bench(bench_weights_fractional, s, &wms, &tk);
-    print_result("wt_fractional", n, wms, tk);
+    run_bench(bench_weights_fractional, s, n, &st);
+    print_result("wt_fractional", n, &st);
 
-    run_bench(bench_weights_wiener, s, &wms, &tk);
-    print_result("wt_wiener", n, wms, tk);
+    run_bench(bench_weights_wiener, s, n, &st);
+    print_result("wt_wiener", n, &st);
 
-    run_bench(bench_weights_specnorm, s, &wms, &tk);
-    print_result("wt_specnorm", n, wms, tk);
+    run_bench(bench_weights_specnorm, s, n, &st);
+    print_result("wt_specnorm", n, &st);
 
-    run_bench(bench_weights_mandelbrot, s, &wms, &tk);
-    print_result("wt_mandelbrot", n, wms, tk);
+    run_bench(bench_weights_mandelbrot, s, n, &st);
+    print_result("wt_mandelbrot", n, &st);
 
     /* Re-fill for RMT (needs eigenvalues above threshold) */
     double sc = sqrt(0.5);
     double lp = (1.0 + sc) * (1.0 + sc);
     for (int i = 0; i < n; ++i)
         s->lam[i] = lp + 1.0 + 5.0 * (double)i / (double)n;
-    run_bench(bench_weights_rmt_shrink, s, &wms, &tk);
-    print_result("wt_rmt_shrink", n, wms, tk);
+    run_bench(bench_weights_rmt_shrink, s, n, &st);
+    print_result("wt_rmt_shrink", n, &st);
 
     fftw_free(s->lam); fftw_free(s->w);
     free(s);
@@ -368,9 +435,9 @@ static void run_apply_weight_benchmarks(int n)
     for (int i = 0; i < n; ++i)
         s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
 
-    double wms; uint64_t tk;
-    run_bench(bench_apply_wiener, s, &wms, &tk);
-    print_result("apply_wiener_e2e", n, wms, tk);
+    bench_stats st;
+    run_bench(bench_apply_wiener, s, n, &st);
+    print_result("apply_wiener_e2e", n, &st);
 
     cheap_destroy(&s->ctx);
     fftw_free(s->input); fftw_free(s->weights); fftw_free(s->output);
@@ -385,8 +452,7 @@ int main(void)
     static const int sizes[] = {1024, 8192, 65536};
     static const int nsizes  = 3;
 
-    printf("# %-22s %6s   %10s   %12s\n",
-           "algo", "N", "wall_ms", "ticks");
+    print_header();
 
     /* Core algorithms */
     for (int i = 0; i < nsizes; ++i)

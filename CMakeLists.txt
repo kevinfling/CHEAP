@@ -96,6 +96,7 @@ set_tests_properties(unit PROPERTIES TIMEOUT 60)
 add_executable(bench_cheap benchmarks/bench_cheap.c)
 target_link_libraries(bench_cheap PRIVATE cheap)
 target_compile_definitions(bench_cheap PRIVATE _POSIX_C_SOURCE=199309L)
+target_compile_options(bench_cheap PRIVATE -O3 -ffast-math -fopenmp-simd)
 
 # Statistical benchmark (FFTW_PATIENT with repeated trials)
 add_executable(bench_cheap_stats benchmarks/bench_cheap_stats.c)
