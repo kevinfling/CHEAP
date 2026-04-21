@@ -971,6 +971,123 @@ static inline void cheap__clgamma(double re, double im,
 }
 
 /*
+ * cheap__clgamma_re_noreflect — batched real-part log-Gamma.
+ * Computes Re(lnGamma(re + i*im[lane])) for LANES lanes in
+ * parallel via Lanczos. Requires re >= 0.5 (no reflection).
+ * Real part only: Mandelbrot needs Re(ln Γ_num - ln Γ_den).
+ *
+ * Used by cheap_weights_mandelbrot for whichever of H, 1-H is
+ * >= 0.5. The other side falls back to scalar cheap__clgamma.
+ */
+#if defined(CHEAP_SIMD_AVX2)
+static inline __m256d cheap__clgamma_re_noreflect_avx2(double re, __m256d vim)
+{
+    static const double c[9] = {
+        0.99999999999980993,  676.5203681218851,   -1259.1392167224028,
+        771.32342877765313,  -176.61502916214059,   12.507343278686905,
+       -0.13857109526572012,  9.9843695780195716e-6, 1.5056327351493116e-7
+    };
+    const double g = 7.0;
+    const double zm1 = re - 1.0;
+    __m256d xr = _mm256_set1_pd(c[0]);
+    __m256d xi = _mm256_setzero_pd();
+    __m256d veps = _mm256_set1_pd(CHEAP_EPS_DIV);
+    for (int i = 1; i <= 8; ++i) {
+        double dr = zm1 + (double)i;
+        __m256d vdr = _mm256_set1_pd(dr);
+        __m256d vdi = vim;
+        __m256d denom = _mm256_add_pd(_mm256_mul_pd(vdr, vdr),
+                                       _mm256_mul_pd(vdi, vdi));
+        denom = _mm256_max_pd(denom, veps);
+        __m256d ci = _mm256_set1_pd(c[i]);
+        __m256d qr = _mm256_div_pd(_mm256_mul_pd(ci, vdr), denom);
+        __m256d qi = _mm256_div_pd(_mm256_sub_pd(_mm256_setzero_pd(),
+                                                  _mm256_mul_pd(ci, vdi)), denom);
+        xr = _mm256_add_pd(xr, qr);
+        xi = _mm256_add_pd(xi, qi);
+    }
+    __m256d vtr = _mm256_set1_pd(zm1 + g + 0.5);
+    __m256d vti = vim;
+    /* log|t| = 0.5 * log(tr^2 + ti^2) */
+    __m256d mag_t2 = _mm256_add_pd(_mm256_mul_pd(vtr, vtr),
+                                    _mm256_mul_pd(vti, vti));
+    mag_t2 = _mm256_max_pd(mag_t2, veps);
+    /* log|x| = 0.5 * log(xr^2 + xi^2) */
+    __m256d mag_x2 = _mm256_add_pd(_mm256_mul_pd(xr, xr),
+                                    _mm256_mul_pd(xi, xi));
+    mag_x2 = _mm256_max_pd(mag_x2, veps);
+    double halfln2pi = 0.5 * log(2.0 * M_PI);
+    double zph_r = zm1 + 0.5;
+    /* Re((z+0.5)*ln(t)) = zph_r * 0.5*log(|t|^2) - zph_i * atan2(ti, tr)
+       zph_i = vim (lane-varying); atan2 is scalar-only — extract. */
+    double tmp_t[4], tmp_x[4], tmp_im[4];
+    _mm256_storeu_pd(tmp_t, mag_t2);
+    _mm256_storeu_pd(tmp_x, mag_x2);
+    _mm256_storeu_pd(tmp_im, vim);
+    double tr_scalar = zm1 + g + 0.5;
+    double out[4];
+    for (int l = 0; l < 4; ++l) {
+        double log_t_r = 0.5 * log(tmp_t[l]);
+        double log_t_i = atan2(tmp_im[l], tr_scalar);
+        double log_x_r = 0.5 * log(tmp_x[l]);
+        double term1_r = zph_r * log_t_r - tmp_im[l] * log_t_i;
+        out[l] = halfln2pi + term1_r - tr_scalar + log_x_r;
+    }
+    return _mm256_loadu_pd(out);
+}
+#endif
+
+#if defined(CHEAP_SIMD_NEON)
+static inline float64x2_t cheap__clgamma_re_noreflect_neon(double re, float64x2_t vim)
+{
+    static const double c[9] = {
+        0.99999999999980993,  676.5203681218851,   -1259.1392167224028,
+        771.32342877765313,  -176.61502916214059,   12.507343278686905,
+       -0.13857109526572012,  9.9843695780195716e-6, 1.5056327351493116e-7
+    };
+    const double g = 7.0;
+    const double zm1 = re - 1.0;
+    float64x2_t xr = vdupq_n_f64(c[0]);
+    float64x2_t xi = vdupq_n_f64(0.0);
+    float64x2_t veps = vdupq_n_f64(CHEAP_EPS_DIV);
+    for (int i = 1; i <= 8; ++i) {
+        double dr = zm1 + (double)i;
+        float64x2_t vdr = vdupq_n_f64(dr);
+        float64x2_t vdi = vim;
+        float64x2_t denom = vaddq_f64(vmulq_f64(vdr, vdr),
+                                        vmulq_f64(vdi, vdi));
+        denom = vmaxq_f64(denom, veps);
+        float64x2_t ci = vdupq_n_f64(c[i]);
+        float64x2_t qr = vdivq_f64(vmulq_f64(ci, vdr), denom);
+        float64x2_t qi = vdivq_f64(vnegq_f64(vmulq_f64(ci, vdi)), denom);
+        xr = vaddq_f64(xr, qr);
+        xi = vaddq_f64(xi, qi);
+    }
+    float64x2_t mag_t2 = vaddq_f64(vdupq_n_f64((zm1 + g + 0.5) * (zm1 + g + 0.5)),
+                                     vmulq_f64(vim, vim));
+    mag_t2 = vmaxq_f64(mag_t2, veps);
+    float64x2_t mag_x2 = vaddq_f64(vmulq_f64(xr, xr), vmulq_f64(xi, xi));
+    mag_x2 = vmaxq_f64(mag_x2, veps);
+    double halfln2pi = 0.5 * log(2.0 * M_PI);
+    double zph_r = zm1 + 0.5;
+    double tr_scalar = zm1 + g + 0.5;
+    double tmp_t[2], tmp_x[2], tmp_im[2];
+    vst1q_f64(tmp_t, mag_t2);
+    vst1q_f64(tmp_x, mag_x2);
+    vst1q_f64(tmp_im, vim);
+    double out[2];
+    for (int l = 0; l < 2; ++l) {
+        double log_t_r = 0.5 * log(tmp_t[l]);
+        double log_t_i = atan2(tmp_im[l], tr_scalar);
+        double log_x_r = 0.5 * log(tmp_x[l]);
+        double term1_r = zph_r * log_t_r - tmp_im[l] * log_t_i;
+        out[l] = halfln2pi + term1_r - tr_scalar + log_x_r;
+    }
+    return vld1q_f64(out);
+}
+#endif
+
+/*
  * cheap_weights_mandelbrot — Mandelbrot multifractal spectral weights.
  *
  *   weights_out[k] = |Gamma(H + i*tau_k) / Gamma(1-H + i*tau_k)|
@@ -978,6 +1095,9 @@ static inline void cheap__clgamma(double re, double im,
  * where tau_k = pi*k/n. H must be in (0, 1).
  * At H = 0.5, all weights equal 1.0 (symmetry).
  * Computed in log-space via Lanczos complex log-Gamma.
+ * AVX2/NEON accelerated when H != 0.5: the Lanczos sum runs
+ * 2 (NEON) or 4 (AVX2) k-values in parallel on the side of
+ * the ratio with Re(z) >= 0.5; the reflection side stays scalar.
  */
 static inline int cheap_weights_mandelbrot(int n, double H,
                                              double* restrict weights_out)
@@ -987,8 +1107,59 @@ static inline int cheap_weights_mandelbrot(int n, double H,
     /* k = 0: real Gamma ratio */
     weights_out[0] = exp(lgamma(H) - lgamma(1.0 - H));
 
-    for (int k = 1; k < n; ++k) {
-        double tau = M_PI * (double)k / (double)n;
+    const double inv_n = 1.0 / (double)n;
+    int k = 1;
+#if defined(CHEAP_SIMD_AVX2) || defined(CHEAP_SIMD_NEON)
+    /*
+     * Identify which side (H or 1-H) is the non-reflection side
+     * (Re(z) >= 0.5). Vectorize that side via batched Lanczos;
+     * the other side stays scalar (reflection branch is branchy).
+     */
+    const double re_noref  = (H >= 0.5) ? H : 1.0 - H;
+    const double re_ref    = (H >= 0.5) ? 1.0 - H : H;
+    const int noref_is_num = (H >= 0.5);
+#endif
+#if defined(CHEAP_SIMD_AVX2)
+    for (; k + 4 <= n; k += 4) {
+        double taus_arr[4] = {
+            M_PI * (double)(k    ) * inv_n,
+            M_PI * (double)(k + 1) * inv_n,
+            M_PI * (double)(k + 2) * inv_n,
+            M_PI * (double)(k + 3) * inv_n
+        };
+        __m256d vim = _mm256_loadu_pd(taus_arr);
+        __m256d vre_noref = cheap__clgamma_re_noreflect_avx2(re_noref, vim);
+        double noref[4];
+        _mm256_storeu_pd(noref, vre_noref);
+        for (int l = 0; l < 4; ++l) {
+            double lg_ref_re, lg_ref_im;
+            cheap__clgamma(re_ref, taus_arr[l], &lg_ref_re, &lg_ref_im);
+            double diff = noref_is_num ? (noref[l] - lg_ref_re)
+                                        : (lg_ref_re - noref[l]);
+            weights_out[k + l] = exp(diff);
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    for (; k + 2 <= n; k += 2) {
+        double taus_arr[2] = {
+            M_PI * (double)(k    ) * inv_n,
+            M_PI * (double)(k + 1) * inv_n
+        };
+        float64x2_t vim = vld1q_f64(taus_arr);
+        float64x2_t vre_noref = cheap__clgamma_re_noreflect_neon(re_noref, vim);
+        double noref[2];
+        vst1q_f64(noref, vre_noref);
+        for (int l = 0; l < 2; ++l) {
+            double lg_ref_re, lg_ref_im;
+            cheap__clgamma(re_ref, taus_arr[l], &lg_ref_re, &lg_ref_im);
+            double diff = noref_is_num ? (noref[l] - lg_ref_re)
+                                        : (lg_ref_re - noref[l]);
+            weights_out[k + l] = exp(diff);
+        }
+    }
+#endif
+    for (; k < n; ++k) {
+        double tau = M_PI * (double)k * inv_n;
         double lg_num_re, lg_num_im;
         double lg_den_re, lg_den_im;
         cheap__clgamma(H, tau, &lg_num_re, &lg_num_im);
