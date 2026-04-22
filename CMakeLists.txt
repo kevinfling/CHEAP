@@ -111,6 +111,12 @@ target_compile_definitions(test_cheap_2d PRIVATE _POSIX_C_SOURCE=199309L)
 add_test(NAME unit_2d COMMAND test_cheap_2d)
 set_tests_properties(unit_2d PROPERTIES TIMEOUT 60)
 
+add_executable(test_cheap_3d tests/test_cheap_3d.c)
+target_link_libraries(test_cheap_3d PRIVATE cheap)
+target_compile_definitions(test_cheap_3d PRIVATE _POSIX_C_SOURCE=199309L)
+add_test(NAME unit_3d COMMAND test_cheap_3d)
+set_tests_properties(unit_3d PROPERTIES TIMEOUT 120)
+
 # ---------------------------------------------------------------------------
 # Benchmarks (built but NOT registered with CTest)
 # ---------------------------------------------------------------------------

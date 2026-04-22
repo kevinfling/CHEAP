@@ -587,6 +587,227 @@ static inline int cheap_init_from_toeplitz_2d(cheap_ctx_2d* ctx,
 }
 
 /* ============================================================
+ * 3D context — cheap_ctx_3d
+ *
+ * Mirrors cheap_ctx_2d for 3D grids. lambda is flat row-major of
+ * length nx*ny*nz (index = (j*ny + k)*nz + l). FFTW_REDFT10/REDFT01
+ * along all three axes. Normalization factor is 1/(8*nx*ny*nz).
+ * ============================================================ */
+
+typedef struct {
+    int nx, ny, nz;
+    int n;                          /* nx * ny * nz */
+    int is_initialized;
+    double* restrict lambda;
+    double* restrict gibbs;
+    double* restrict sqrt_lambda;
+    double* restrict workspace;
+    double* restrict scratch1;
+    double* restrict scratch2;
+    double* restrict prev_g;
+    fftw_plan plan_fwd;             /* 3D DCT-II */
+    fftw_plan plan_inv;             /* 3D iDCT-III */
+    double current_eps;
+    double current_Hx;              /* -1.0 if from_toeplitz/from_eigenvalues */
+    double current_Hy;
+    double current_Hz;
+} cheap_ctx_3d;
+
+static inline void cheap_destroy_3d(cheap_ctx_3d* ctx)
+{
+    if (!ctx) return;
+    if (ctx->plan_fwd) { fftw_destroy_plan(ctx->plan_fwd); ctx->plan_fwd = NULL; }
+    if (ctx->plan_inv) { fftw_destroy_plan(ctx->plan_inv); ctx->plan_inv = NULL; }
+    if (ctx->lambda)      { fftw_free(ctx->lambda);      ctx->lambda = NULL; }
+    if (ctx->gibbs)       { fftw_free(ctx->gibbs);       ctx->gibbs = NULL; }
+    if (ctx->sqrt_lambda) { fftw_free(ctx->sqrt_lambda); ctx->sqrt_lambda = NULL; }
+    if (ctx->workspace)   { fftw_free(ctx->workspace);   ctx->workspace = NULL; }
+    if (ctx->scratch1)    { fftw_free(ctx->scratch1);    ctx->scratch1 = NULL; }
+    if (ctx->scratch2)    { fftw_free(ctx->scratch2);    ctx->scratch2 = NULL; }
+    if (ctx->prev_g)      { fftw_free(ctx->prev_g);      ctx->prev_g = NULL; }
+    ctx->is_initialized = 0;
+}
+
+/*
+ * cheap__alloc_ctx_3d — private helper: allocate flat nx*ny*nz buffers
+ * and build 3D FFTW plans. Leaves lambda[] uninitialized.
+ */
+static inline int cheap__alloc_ctx_3d(cheap_ctx_3d* ctx, int nx, int ny, int nz)
+{
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->nx = nx;
+    ctx->ny = ny;
+    ctx->nz = nz;
+    ctx->n  = nx * ny * nz;
+    ctx->current_eps = -1.0;
+    ctx->current_Hx  = -1.0;
+    ctx->current_Hy  = -1.0;
+    ctx->current_Hz  = -1.0;
+    const size_t bytes = (size_t)ctx->n * sizeof(double);
+    ctx->lambda      = (double*)fftw_malloc(bytes);
+    ctx->gibbs       = (double*)fftw_malloc(bytes);
+    ctx->sqrt_lambda = (double*)fftw_malloc(bytes);
+    ctx->workspace   = (double*)fftw_malloc(bytes);
+    ctx->scratch1    = (double*)fftw_malloc(bytes);
+    ctx->scratch2    = (double*)fftw_malloc(bytes);
+    ctx->prev_g      = (double*)fftw_malloc(bytes);
+    if (!ctx->lambda || !ctx->gibbs || !ctx->sqrt_lambda || !ctx->workspace ||
+        !ctx->scratch1 || !ctx->scratch2 || !ctx->prev_g) {
+        cheap_destroy_3d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    CHEAP_ASSERT_ALIGNED(ctx->lambda);
+    CHEAP_ASSERT_ALIGNED(ctx->gibbs);
+    CHEAP_ASSERT_ALIGNED(ctx->sqrt_lambda);
+    CHEAP_ASSERT_ALIGNED(ctx->workspace);
+    CHEAP_ASSERT_ALIGNED(ctx->scratch1);
+    CHEAP_ASSERT_ALIGNED(ctx->scratch2);
+    CHEAP_ASSERT_ALIGNED(ctx->prev_g);
+    ctx->plan_fwd = fftw_plan_r2r_3d(nx, ny, nz,
+                                      ctx->workspace, ctx->workspace,
+                                      FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10,
+                                      FFTW_PATIENT);
+    ctx->plan_inv = fftw_plan_r2r_3d(nx, ny, nz,
+                                      ctx->workspace, ctx->workspace,
+                                      FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01,
+                                      FFTW_PATIENT);
+    if (!ctx->plan_fwd || !ctx->plan_inv) {
+        cheap_destroy_3d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_init_3d — initialize a 3D context with a tensor-product Flandrin
+ * spectrum: lambda_{jkl} = lambda_j^(x,Hx) * lambda_k^(y,Hy) * lambda_l^(z,Hz).
+ */
+static inline int cheap_init_3d(cheap_ctx_3d* ctx, int nx, int ny, int nz,
+                                  double Hx, double Hy, double Hz)
+{
+    if (!ctx || nx < 2 || ny < 2 || nz < 2 ||
+        Hx <= 0.0 || Hx >= 1.0 ||
+        Hy <= 0.0 || Hy >= 1.0 ||
+        Hz <= 0.0 || Hz >= 1.0) return CHEAP_EINVAL;
+    int rc = cheap__alloc_ctx_3d(ctx, nx, ny, nz);
+    if (rc != CHEAP_OK) return rc;
+    ctx->current_Hx = Hx;
+    ctx->current_Hy = Hy;
+    ctx->current_Hz = Hz;
+    double* lx = (double*)fftw_malloc((size_t)nx * sizeof(double));
+    double* ly = (double*)fftw_malloc((size_t)ny * sizeof(double));
+    double* lz = (double*)fftw_malloc((size_t)nz * sizeof(double));
+    if (!lx || !ly || !lz) {
+        if (lx) fftw_free(lx);
+        if (ly) fftw_free(ly);
+        if (lz) fftw_free(lz);
+        cheap_destroy_3d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    cheap__flandrin_1d_axis(lx, nx, Hx);
+    cheap__flandrin_1d_axis(ly, ny, Hy);
+    cheap__flandrin_1d_axis(lz, nz, Hz);
+    for (int j = 0; j < nx; ++j) {
+        for (int k = 0; k < ny; ++k) {
+            double xy = lx[j] * ly[k];
+            for (int l = 0; l < nz; ++l) {
+                ctx->lambda[(j * ny + k) * nz + l] = xy * lz[l];
+            }
+        }
+    }
+    fftw_free(lx);
+    fftw_free(ly);
+    fftw_free(lz);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, ctx->n);
+    for (int k = 0; k < ctx->n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_init_from_eigenvalues_3d — user-supplied flat row-major
+ * eigenvalue grid of length nx*ny*nz. current_H{x,y,z} = -1.0.
+ */
+static inline int cheap_init_from_eigenvalues_3d(cheap_ctx_3d* ctx,
+                                                  int nx, int ny, int nz,
+                                                  const double* lambda_flat)
+{
+    if (!ctx || nx < 2 || ny < 2 || nz < 2 || !lambda_flat) return CHEAP_EINVAL;
+    const int n = nx * ny * nz;
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(lambda_flat[i])) return CHEAP_EDOM;
+    int rc = cheap__alloc_ctx_3d(ctx, nx, ny, nz);
+    if (rc != CHEAP_OK) return rc;
+    memcpy(ctx->lambda, lambda_flat, (size_t)n * sizeof(double));
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, ctx->n);
+    for (int k = 0; k < ctx->n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_init_from_toeplitz_3d — separable BTTTB covariance specified
+ * by three 1D Toeplitz first columns. Each axis is DCT'd with a
+ * transient FFTW_ESTIMATE plan (see cheap__dct2_1d_transient), then
+ * tensor-producted into the flat nx*ny*nz eigenvalue grid.
+ */
+static inline int cheap_init_from_toeplitz_3d(cheap_ctx_3d* ctx,
+                                                int nx, int ny, int nz,
+                                                const double* t_x,
+                                                const double* t_y,
+                                                const double* t_z)
+{
+    if (!ctx || nx < 2 || ny < 2 || nz < 2 || !t_x || !t_y || !t_z)
+        return CHEAP_EINVAL;
+    for (int i = 0; i < nx; ++i) if (!isfinite(t_x[i])) return CHEAP_EDOM;
+    for (int i = 0; i < ny; ++i) if (!isfinite(t_y[i])) return CHEAP_EDOM;
+    for (int i = 0; i < nz; ++i) if (!isfinite(t_z[i])) return CHEAP_EDOM;
+    int rc = cheap__alloc_ctx_3d(ctx, nx, ny, nz);
+    if (rc != CHEAP_OK) return rc;
+
+    double* lx = (double*)fftw_malloc((size_t)nx * sizeof(double));
+    double* ly = (double*)fftw_malloc((size_t)ny * sizeof(double));
+    double* lz = (double*)fftw_malloc((size_t)nz * sizeof(double));
+    if (!lx || !ly || !lz) {
+        if (lx) fftw_free(lx);
+        if (ly) fftw_free(ly);
+        if (lz) fftw_free(lz);
+        cheap_destroy_3d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    memcpy(lx, t_x, (size_t)nx * sizeof(double));
+    memcpy(ly, t_y, (size_t)ny * sizeof(double));
+    memcpy(lz, t_z, (size_t)nz * sizeof(double));
+    if (cheap__dct2_1d_transient(lx, nx) != CHEAP_OK ||
+        cheap__dct2_1d_transient(ly, ny) != CHEAP_OK ||
+        cheap__dct2_1d_transient(lz, nz) != CHEAP_OK) {
+        fftw_free(lx);
+        fftw_free(ly);
+        fftw_free(lz);
+        cheap_destroy_3d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    for (int j = 0; j < nx; ++j) {
+        for (int k = 0; k < ny; ++k) {
+            double xy = lx[j] * ly[k];
+            for (int l = 0; l < nz; ++l) {
+                ctx->lambda[(j * ny + k) * nz + l] = xy * lz[l];
+            }
+        }
+    }
+    fftw_free(lx);
+    fftw_free(ly);
+    fftw_free(lz);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, ctx->n);
+    for (int k = 0; k < ctx->n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+    return CHEAP_OK;
+}
+
+/* ============================================================
  * Core spectral primitives: forward, inverse, apply
  * ============================================================ */
 
