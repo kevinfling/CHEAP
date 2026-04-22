@@ -165,13 +165,119 @@ static void test_init_2d_tensor_product(void)
     }
 }
 
+/* ---------- Phase 1.2 ---------- */
+
+static void test_init_from_eigenvalues_2d(void)
+{
+    const int nx = 17, ny = 13;
+    const int n  = nx * ny;
+    double *lam = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_TRUE(lam != NULL);
+    for (int i = 0; i < n; ++i) lam[i] = 1.0 + 0.5 * sin(0.37 * i);
+
+    cheap_ctx_2d ctx = {0};
+    ASSERT_EQ(cheap_init_from_eigenvalues_2d(&ctx, nx, ny, lam), CHEAP_OK);
+    ASSERT_EQ(ctx.nx, nx);
+    ASSERT_EQ(ctx.ny, ny);
+    ASSERT_NEAR(ctx.current_Hx, -1.0, 1e-15);
+    ASSERT_NEAR(ctx.current_Hy, -1.0, 1e-15);
+    for (int i = 0; i < n; ++i) ASSERT_NEAR(ctx.lambda[i], lam[i], 1e-15);
+    for (int i = 0; i < n; ++i)
+        ASSERT_NEAR(ctx.sqrt_lambda[i], sqrt(fmax(lam[i], 1e-15)), 1e-14);
+    cheap_destroy_2d(&ctx);
+
+    /* Bad args */
+    cheap_ctx_2d bad = {0};
+    ASSERT_EQ(cheap_init_from_eigenvalues_2d(NULL, nx, ny, lam), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_eigenvalues_2d(&bad,   1, ny, lam), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_eigenvalues_2d(&bad,  nx,  1, lam), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_eigenvalues_2d(&bad,  nx, ny, NULL), CHEAP_EINVAL);
+    lam[5] = (double)INFINITY;
+    ASSERT_EQ(cheap_init_from_eigenvalues_2d(&bad,  nx, ny, lam), CHEAP_EDOM);
+
+    free(lam);
+}
+
+static void test_init_from_toeplitz_2d_matches_flandrin(void)
+{
+    /* Strategy: build a Flandrin 1D spectrum along each axis, transform it
+     * back to a Toeplitz first column via iDCT-III, then feed those columns
+     * into cheap_init_from_toeplitz_2d. The resulting 2D eigenvalues must
+     * match cheap_init_2d (tensor-product Flandrin) to near float64 epsilon. */
+    const int nx = 32, ny = 48;
+    const double Hx = 0.4, Hy = 0.7;
+
+    double *lx = (double *)fftw_malloc((size_t)nx * sizeof(double));
+    double *ly = (double *)fftw_malloc((size_t)ny * sizeof(double));
+    double *tx = (double *)fftw_malloc((size_t)nx * sizeof(double));
+    double *ty = (double *)fftw_malloc((size_t)ny * sizeof(double));
+    ASSERT_TRUE(lx && ly && tx && ty);
+
+    ref_flandrin_1d(lx, nx, Hx);
+    ref_flandrin_1d(ly, ny, Hy);
+
+    /* First column t = iDCT-III(lambda) / (2N): DCT-II is its own inverse
+     * up to this normalization, so running the inverse plan on lambda
+     * recovers the Toeplitz first column whose DCT-II eigenvalues are
+     * lambda itself. */
+    memcpy(tx, lx, (size_t)nx * sizeof(double));
+    memcpy(ty, ly, (size_t)ny * sizeof(double));
+    fftw_plan pix = fftw_plan_r2r_1d(nx, tx, tx, FFTW_REDFT01, FFTW_ESTIMATE);
+    fftw_plan piy = fftw_plan_r2r_1d(ny, ty, ty, FFTW_REDFT01, FFTW_ESTIMATE);
+    fftw_execute(pix); fftw_execute(piy);
+    fftw_destroy_plan(pix); fftw_destroy_plan(piy);
+    for (int i = 0; i < nx; ++i) tx[i] /= (2.0 * (double)nx);
+    for (int i = 0; i < ny; ++i) ty[i] /= (2.0 * (double)ny);
+
+    cheap_ctx_2d a = {0}, b = {0};
+    ASSERT_EQ(cheap_init_2d(&a, nx, ny, Hx, Hy), CHEAP_OK);
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(&b, nx, ny, tx, ty), CHEAP_OK);
+    ASSERT_NEAR(b.current_Hx, -1.0, 1e-15);
+    ASSERT_NEAR(b.current_Hy, -1.0, 1e-15);
+
+    double max_rel = 0.0;
+    for (int i = 0; i < nx * ny; ++i) {
+        double got = b.lambda[i], expected = a.lambda[i];
+        double rel = fabs(got - expected) / fmax(fabs(expected), 1.0);
+        if (rel > max_rel) max_rel = rel;
+    }
+    /* 1e-10 relative is the contract written into the plan — the DCT
+     * round-trip accumulates O(N*eps) error, so this is comfortable. */
+    ASSERT_TRUE(max_rel < 1e-10);
+
+    cheap_destroy_2d(&a);
+    cheap_destroy_2d(&b);
+    fftw_free(lx); fftw_free(ly); fftw_free(tx); fftw_free(ty);
+}
+
+static void test_init_from_toeplitz_2d_bad_args(void)
+{
+    const int nx = 8, ny = 6;
+    double *tx = (double *)malloc((size_t)nx * sizeof(double));
+    double *ty = (double *)malloc((size_t)ny * sizeof(double));
+    for (int i = 0; i < nx; ++i) tx[i] = 1.0 / (1.0 + i);
+    for (int i = 0; i < ny; ++i) ty[i] = 1.0 / (1.0 + i);
+    cheap_ctx_2d ctx = {0};
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(NULL, nx, ny, tx, ty), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(&ctx,  1, ny, tx, ty), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(&ctx, nx,  1, tx, ty), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(&ctx, nx, ny, NULL, ty), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(&ctx, nx, ny, tx, NULL), CHEAP_EINVAL);
+    tx[0] = (double)NAN;
+    ASSERT_EQ(cheap_init_from_toeplitz_2d(&ctx, nx, ny, tx, ty), CHEAP_EDOM);
+    free(tx); free(ty);
+}
+
 int main(void)
 {
     printf("=== test_cheap_2d ===\n");
-    test_init_2d_invalid_args();       printf("  test_init_2d_invalid_args\n");
-    test_init_2d_fields();             printf("  test_init_2d_fields\n");
-    test_init_2d_destroy_idempotent(); printf("  test_init_2d_destroy_idempotent\n");
-    test_init_2d_tensor_product();     printf("  test_init_2d_tensor_product\n");
+    test_init_2d_invalid_args();                  printf("  test_init_2d_invalid_args\n");
+    test_init_2d_fields();                        printf("  test_init_2d_fields\n");
+    test_init_2d_destroy_idempotent();            printf("  test_init_2d_destroy_idempotent\n");
+    test_init_2d_tensor_product();                printf("  test_init_2d_tensor_product\n");
+    test_init_from_eigenvalues_2d();              printf("  test_init_from_eigenvalues_2d\n");
+    test_init_from_toeplitz_2d_matches_flandrin();printf("  test_init_from_toeplitz_2d_matches_flandrin\n");
+    test_init_from_toeplitz_2d_bad_args();        printf("  test_init_from_toeplitz_2d_bad_args\n");
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;

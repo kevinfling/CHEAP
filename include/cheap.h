@@ -489,6 +489,103 @@ static inline int cheap_init_2d(cheap_ctx_2d* ctx, int nx, int ny,
     return CHEAP_OK;
 }
 
+/*
+ * cheap_init_from_eigenvalues_2d — initialize a 2D context with a
+ * user-supplied, flat row-major eigenvalue grid of length nx*ny.
+ * All entries must be finite; positive entries are required for
+ * KRR/Sinkhorn to remain well-posed (not enforced here — caller's
+ * responsibility to ensure positivity when it matters).
+ *
+ * On success, current_Hx = current_Hy = -1.0 (sentinel).
+ */
+static inline int cheap_init_from_eigenvalues_2d(cheap_ctx_2d* ctx,
+                                                  int nx, int ny,
+                                                  const double* lambda_flat)
+{
+    if (!ctx || nx < 2 || ny < 2 || !lambda_flat) return CHEAP_EINVAL;
+    const int n = nx * ny;
+    for (int i = 0; i < n; ++i) if (!isfinite(lambda_flat[i])) return CHEAP_EDOM;
+    int rc = cheap__alloc_ctx_2d(ctx, nx, ny);
+    if (rc != CHEAP_OK) return rc;
+    memcpy(ctx->lambda, lambda_flat, (size_t)n * sizeof(double));
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, n);
+    for (int k = 0; k < n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+    return CHEAP_OK;
+}
+
+/*
+ * cheap__dct2_1d_transient — run a one-shot DCT-II on an n-vector using
+ * a locally-built FFTW_ESTIMATE plan. Used by cheap_init_from_toeplitz_2d
+ * to compute per-axis eigenvalues without touching the 2D ctx's plans.
+ * Destructive on input. Returns CHEAP_OK / CHEAP_ENOMEM.
+ */
+static inline int cheap__dct2_1d_transient(double* v, int n)
+{
+    fftw_plan p = fftw_plan_r2r_1d(n, v, v, FFTW_REDFT10, FFTW_ESTIMATE);
+    if (!p) return CHEAP_ENOMEM;
+    fftw_execute(p);
+    fftw_destroy_plan(p);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_init_from_toeplitz_2d — initialize a 2D context from a separable
+ * block-Toeplitz-with-Toeplitz-blocks (BTTB) covariance whose structure
+ * factors as T_row ⊗ T_col. Takes two first-column vectors:
+ *
+ *   t_row: first column of the ny-by-ny row-axis Toeplitz block (length ny)
+ *   t_col: first column of the nx-by-nx column-axis Toeplitz block (length nx)
+ *
+ * The 2D eigenvalues are the outer product of the axis eigenvalues:
+ *   lambda_{jk} = DCT-II(t_col)[j] * DCT-II(t_row)[k].
+ *
+ * General (non-separable) BTTB is out of scope — use
+ * cheap_init_from_eigenvalues_2d if you have the full grid.
+ *
+ * On success, current_Hx = current_Hy = -1.0.
+ */
+static inline int cheap_init_from_toeplitz_2d(cheap_ctx_2d* ctx,
+                                                int nx, int ny,
+                                                const double* t_col,
+                                                const double* t_row)
+{
+    if (!ctx || nx < 2 || ny < 2 || !t_col || !t_row) return CHEAP_EINVAL;
+    for (int i = 0; i < nx; ++i) if (!isfinite(t_col[i])) return CHEAP_EDOM;
+    for (int i = 0; i < ny; ++i) if (!isfinite(t_row[i])) return CHEAP_EDOM;
+    int rc = cheap__alloc_ctx_2d(ctx, nx, ny);
+    if (rc != CHEAP_OK) return rc;
+
+    double* lx = (double*)fftw_malloc((size_t)nx * sizeof(double));
+    double* ly = (double*)fftw_malloc((size_t)ny * sizeof(double));
+    if (!lx || !ly) {
+        if (lx) fftw_free(lx);
+        if (ly) fftw_free(ly);
+        cheap_destroy_2d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    memcpy(lx, t_col, (size_t)nx * sizeof(double));
+    memcpy(ly, t_row, (size_t)ny * sizeof(double));
+    if (cheap__dct2_1d_transient(lx, nx) != CHEAP_OK ||
+        cheap__dct2_1d_transient(ly, ny) != CHEAP_OK) {
+        fftw_free(lx);
+        fftw_free(ly);
+        cheap_destroy_2d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    for (int j = 0; j < nx; ++j)
+        for (int k = 0; k < ny; ++k)
+            ctx->lambda[j * ny + k] = lx[j] * ly[k];
+    fftw_free(lx);
+    fftw_free(ly);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, ctx->n);
+    for (int k = 0; k < ctx->n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+    return CHEAP_OK;
+}
+
 /* ============================================================
  * Core spectral primitives: forward, inverse, apply
  * ============================================================ */
