@@ -1099,6 +1099,63 @@ static inline int cheap_weights_fractional(int n, double d,
 }
 
 /*
+ * cheap_weights_laplacian_2d — Isotropic 2D Laplacian eigenvalues.
+ *
+ *   w[j*ny + k] = 4*sin^2(pi*j/(2*nx)) + 4*sin^2(pi*k/(2*ny))
+ *
+ * Neumann-BC discrete 2D Laplacian on an nx*ny grid, row-major layout.
+ * w[0] = 0 exactly (DC). Zero-frequency axes contribute zero — i.e. the
+ * j=0 row equals 4*sin^2(pi*k/(2*ny)), and the k=0 column likewise.
+ * Does NOT require a cheap_ctx_2d.
+ */
+static inline int cheap_weights_laplacian_2d(int nx, int ny,
+                                               double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || !weights_out) return CHEAP_EINVAL;
+    /* Precompute per-axis 1D Laplacian spectra, then sum. */
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            weights_out[j * ny + k] = lx + 4.0 * sy * sy;
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_fractional_laplacian_2d — (-Delta)^alpha on a 2D grid.
+ *
+ *   w[j*ny + k] = ( 4*sin^2(pi*j/(2*nx)) + 4*sin^2(pi*k/(2*ny)) )^alpha
+ *
+ * alpha > 0: fractional Laplacian (diffusive). alpha < 0: fractional
+ * inverse Laplacian (smoothing/integration). alpha = 0: identity.
+ * The DC cell (j=k=0) is floored to CHEAP_EPS_LOG before pow() to
+ * avoid 0^negative = inf when alpha < 0.
+ * Does NOT require a cheap_ctx_2d.
+ */
+static inline int cheap_weights_fractional_laplacian_2d(int nx, int ny,
+                                                          double alpha,
+                                                          double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || !weights_out || !isfinite(alpha)) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double v  = lx + 4.0 * sy * sy;
+            if (v < CHEAP_EPS_LOG) v = CHEAP_EPS_LOG;
+            weights_out[j * ny + k] = pow(v, alpha);
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
+    return CHEAP_OK;
+}
+
+/*
  * cheap_weights_kpca_hard — Hard spectral truncation (Kernel PCA).
  *
  *   weights_out[k] = (k < K) ? 1.0 : 0.0

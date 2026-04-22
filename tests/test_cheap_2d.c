@@ -441,6 +441,112 @@ static void test_apply_2d_bad_args(void)
     free(x); free(w); free(y);
 }
 
+/* ---------- Phase 1.4: 2D weight constructors ---------- */
+
+static void test_weights_laplacian_2d(void)
+{
+    const int nx = 128, ny = 96;
+    const int n  = nx * ny;
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian_2d(nx, ny, w), CHEAP_OK);
+
+    /* DC is exactly zero. */
+    ASSERT_NEAR(w[0], 0.0, 0.0);
+    /* All entries finite and non-negative. */
+    int all_finite = 1, all_nonneg = 1;
+    for (int i = 0; i < n; ++i) {
+        if (!isfinite(w[i])) all_finite = 0;
+        if (w[i] < 0.0) all_nonneg = 0;
+    }
+    ASSERT_TRUE(all_finite);
+    ASSERT_TRUE(all_nonneg);
+
+    /* Spot-check the axis-sum formula at a few cells. */
+    const int probes[][2] = {{0, 0}, {0, 5}, {7, 0}, {13, 21}, {nx-1, ny-1}};
+    for (size_t p = 0; p < sizeof(probes)/sizeof(probes[0]); ++p) {
+        int j = probes[p][0], k = probes[p][1];
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+        double expected = 4.0 * sx * sx + 4.0 * sy * sy;
+        ASSERT_NEAR(w[j * ny + k], expected, 1e-14);
+    }
+
+    /* Monotonic along each axis from the origin: w[j,0] nondecreasing in j,
+     * and w[0,k] nondecreasing in k. (Row-major layout is not globally
+     * sorted; only the axis projections are.) */
+    for (int j = 1; j < nx; ++j) {
+        ASSERT_TRUE(w[j * ny] >= w[(j - 1) * ny] - 1e-15);
+    }
+    for (int k = 1; k < ny; ++k) {
+        ASSERT_TRUE(w[k] >= w[k - 1] - 1e-15);
+    }
+
+    free(w);
+}
+
+static void test_weights_fractional_laplacian_2d_identity(void)
+{
+    const int nx = 64, ny = 64;
+    const int n  = nx * ny;
+    double *w0 = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_fractional_laplacian_2d(nx, ny, 0.0, w0), CHEAP_OK);
+    /* alpha = 0 means identity: every entry = 1.0, including the DC floor
+     * (CHEAP_EPS_LOG)^0 = 1.0. */
+    for (int i = 0; i < n; ++i) ASSERT_NEAR(w0[i], 1.0, 1e-15);
+    free(w0);
+}
+
+static void test_weights_fractional_laplacian_2d_matches_laplacian(void)
+{
+    const int nx = 64, ny = 48;
+    const int n  = nx * ny;
+    double *wL   = (double *)malloc((size_t)n * sizeof(double));
+    double *wF   = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian_2d(nx, ny, wL), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_2d(nx, ny, 1.0, wF), CHEAP_OK);
+    /* alpha=1 must match the Laplacian spectrum at every nonzero cell. DC
+     * is the exception — Laplacian is exactly 0, but the fractional path
+     * floors to CHEAP_EPS_LOG to stay safe under alpha<0. */
+    for (int i = 1; i < n; ++i) ASSERT_NEAR(wF[i], wL[i], 1e-12);
+    free(wL); free(wF);
+}
+
+static void test_weights_fractional_laplacian_2d_power_identity(void)
+{
+    /* For any nonzero alpha, (w_frac)^(1/alpha) should reproduce the
+     * Laplacian spectrum at cells where the DC floor did not engage. */
+    const int nx = 32, ny = 40;
+    const int n  = nx * ny;
+    const double alphas[] = {0.2, 0.5, 1.3, 2.0, -0.75};
+    double *wL = (double *)malloc((size_t)n * sizeof(double));
+    double *wF = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian_2d(nx, ny, wL), CHEAP_OK);
+    for (size_t ai = 0; ai < sizeof(alphas)/sizeof(alphas[0]); ++ai) {
+        double alpha = alphas[ai];
+        ASSERT_EQ(cheap_weights_fractional_laplacian_2d(nx, ny, alpha, wF), CHEAP_OK);
+        for (int i = 1; i < n; ++i) {
+            /* wF = wL^alpha ⇒ wF^(1/alpha) = wL when wL > floor */
+            double recovered = pow(wF[i], 1.0 / alpha);
+            double rel = fabs(recovered - wL[i]) / fmax(fabs(wL[i]), 1.0);
+            ASSERT_TRUE(rel < 1e-10);
+        }
+    }
+    free(wL); free(wF);
+}
+
+static void test_weights_2d_bad_args(void)
+{
+    double w[16];
+    ASSERT_EQ(cheap_weights_laplacian_2d(1, 4, w),    CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_laplacian_2d(4, 1, w),    CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_laplacian_2d(4, 4, NULL), CHEAP_EINVAL);
+
+    ASSERT_EQ(cheap_weights_fractional_laplacian_2d(1, 4, 0.5, w),    CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_2d(4, 1, 0.5, w),    CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_2d(4, 4, 0.5, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_2d(4, 4, (double)NAN, w), CHEAP_EINVAL);
+}
+
 static void test_init_from_toeplitz_2d_bad_args(void)
 {
     const int nx = 8, ny = 6;
@@ -474,6 +580,14 @@ int main(void)
     test_apply_inplace_2d_matches_apply();        printf("  test_apply_inplace_2d_matches_apply\n");
     test_forward_inverse_inplace_2d_equivalence();printf("  test_forward_inverse_inplace_2d_equivalence\n");
     test_apply_2d_bad_args();                     printf("  test_apply_2d_bad_args\n");
+    test_weights_laplacian_2d();                  printf("  test_weights_laplacian_2d\n");
+    test_weights_fractional_laplacian_2d_identity();
+                                                  printf("  test_weights_fractional_laplacian_2d_identity\n");
+    test_weights_fractional_laplacian_2d_matches_laplacian();
+                                                  printf("  test_weights_fractional_laplacian_2d_matches_laplacian\n");
+    test_weights_fractional_laplacian_2d_power_identity();
+                                                  printf("  test_weights_fractional_laplacian_2d_power_identity\n");
+    test_weights_2d_bad_args();                   printf("  test_weights_2d_bad_args\n");
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;
