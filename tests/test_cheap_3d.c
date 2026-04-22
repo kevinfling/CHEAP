@@ -277,6 +277,282 @@ static void test_init_from_toeplitz_3d_bad_args(void)
     free(tx); free(ty); free(tz);
 }
 
+/* ---------- Phase 2.2: forward / inverse / apply 3D ---------- */
+
+static double max_abs_diff(const double *a, const double *b, int n)
+{
+    double m = 0.0;
+    for (int i = 0; i < n; ++i) {
+        double d = fabs(a[i] - b[i]);
+        if (d > m) m = d;
+    }
+    return m;
+}
+
+typedef struct { int nx, ny, nz; } size_triple;
+static const size_triple k_sizes_3d[] = {
+    {4, 4, 4}, {8, 16, 32}, {15, 17, 31}, {32, 32, 32}
+};
+static const int k_num_sizes_3d = (int)(sizeof(k_sizes_3d) / sizeof(k_sizes_3d[0]));
+
+static void fill_signal_3d(double *x, int nx, int ny, int nz, unsigned seed)
+{
+    for (int j = 0; j < nx; ++j) {
+        for (int k = 0; k < ny; ++k) {
+            for (int l = 0; l < nz; ++l) {
+                double s = sin(0.01 * (seed + j * 17 + k * 31 + l * 7));
+                double c = cos(0.013 * (seed * 3 + j * 7 - k + l * 11));
+                x[(j * ny + k) * nz + l] = s + 0.5 * c;
+            }
+        }
+    }
+}
+
+static void test_apply_3d_identity(void)
+{
+    for (int s = 0; s < k_num_sizes_3d; ++s) {
+        const int nx = k_sizes_3d[s].nx;
+        const int ny = k_sizes_3d[s].ny;
+        const int nz = k_sizes_3d[s].nz;
+        const int n  = nx * ny * nz;
+
+        cheap_ctx_3d ctx = {0};
+        ASSERT_EQ(cheap_init_3d(&ctx, nx, ny, nz, 0.5, 0.5, 0.5), CHEAP_OK);
+
+        double *x = (double *)malloc((size_t)n * sizeof(double));
+        double *w = (double *)malloc((size_t)n * sizeof(double));
+        double *y = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal_3d(x, nx, ny, nz, 7u);
+        for (int i = 0; i < n; ++i) w[i] = 1.0;
+
+        ASSERT_EQ(cheap_apply_3d(&ctx, x, w, y), CHEAP_OK);
+        ASSERT_TRUE(max_abs_diff(x, y, n) < 1e-12);
+
+        cheap_destroy_3d(&ctx);
+        free(x); free(w); free(y);
+    }
+}
+
+static void test_forward_inverse_3d_roundtrip(void)
+{
+    for (int s = 0; s < k_num_sizes_3d; ++s) {
+        const int nx = k_sizes_3d[s].nx;
+        const int ny = k_sizes_3d[s].ny;
+        const int nz = k_sizes_3d[s].nz;
+        const int n  = nx * ny * nz;
+
+        cheap_ctx_3d ctx = {0};
+        ASSERT_EQ(cheap_init_3d(&ctx, nx, ny, nz, 0.4, 0.6, 0.5), CHEAP_OK);
+
+        double *x = (double *)malloc((size_t)n * sizeof(double));
+        double *y = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal_3d(x, nx, ny, nz, 13u);
+
+        ASSERT_EQ(cheap_forward_3d(&ctx, x), CHEAP_OK);
+        ASSERT_EQ(cheap_inverse_3d(&ctx, y), CHEAP_OK);
+        ASSERT_TRUE(max_abs_diff(x, y, n) < 1e-12);
+
+        cheap_destroy_3d(&ctx);
+        free(x); free(y);
+    }
+}
+
+static void test_apply_inplace_3d_matches_apply(void)
+{
+    for (int s = 0; s < k_num_sizes_3d; ++s) {
+        const int nx = k_sizes_3d[s].nx;
+        const int ny = k_sizes_3d[s].ny;
+        const int nz = k_sizes_3d[s].nz;
+        const int n  = nx * ny * nz;
+
+        cheap_ctx_3d ctx = {0};
+        ASSERT_EQ(cheap_init_3d(&ctx, nx, ny, nz, 0.3, 0.7, 0.5), CHEAP_OK);
+
+        double *x  = (double *)malloc((size_t)n * sizeof(double));
+        double *w  = (double *)malloc((size_t)n * sizeof(double));
+        double *y1 = (double *)malloc((size_t)n * sizeof(double));
+        double *y2 = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal_3d(x, nx, ny, nz, 29u);
+        for (int i = 0; i < n; ++i) w[i] = 1.0 / (ctx.lambda[i] + 1.0);
+
+        ASSERT_EQ(cheap_apply_3d(&ctx, x, w, y1), CHEAP_OK);
+
+        memcpy(cheap_workspace_3d(&ctx), x, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_apply_inplace_3d(&ctx, w), CHEAP_OK);
+        memcpy(y2, cheap_workspace_3d(&ctx), (size_t)n * sizeof(double));
+
+        ASSERT_TRUE(max_abs_diff(y1, y2, n) < 1e-12);
+
+        cheap_destroy_3d(&ctx);
+        free(x); free(w); free(y1); free(y2);
+    }
+}
+
+static void test_forward_inverse_inplace_3d_equivalence(void)
+{
+    for (int s = 0; s < k_num_sizes_3d; ++s) {
+        const int nx = k_sizes_3d[s].nx;
+        const int ny = k_sizes_3d[s].ny;
+        const int nz = k_sizes_3d[s].nz;
+        const int n  = nx * ny * nz;
+
+        cheap_ctx_3d ctx = {0};
+        ASSERT_EQ(cheap_init_3d(&ctx, nx, ny, nz, 0.5, 0.5, 0.5), CHEAP_OK);
+
+        double *x  = (double *)malloc((size_t)n * sizeof(double));
+        double *yf = (double *)malloc((size_t)n * sizeof(double));
+        double *yi = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal_3d(x, nx, ny, nz, 41u);
+
+        ASSERT_EQ(cheap_forward_3d(&ctx, x), CHEAP_OK);
+        memcpy(yf, cheap_workspace_3d(&ctx), (size_t)n * sizeof(double));
+
+        memcpy(cheap_workspace_3d(&ctx), x, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_forward_inplace_3d(&ctx), CHEAP_OK);
+        memcpy(yi, cheap_workspace_3d(&ctx), (size_t)n * sizeof(double));
+        ASSERT_TRUE(max_abs_diff(yf, yi, n) < 1e-12);
+
+        memcpy(cheap_workspace_3d(&ctx), yf, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_inverse_3d(&ctx, yi), CHEAP_OK);
+
+        memcpy(cheap_workspace_3d(&ctx), yf, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_inverse_inplace_3d(&ctx), CHEAP_OK);
+        ASSERT_TRUE(max_abs_diff(yi, cheap_workspace_3d(&ctx), n) < 1e-12);
+
+        cheap_destroy_3d(&ctx);
+        free(x); free(yf); free(yi);
+    }
+}
+
+static void test_apply_3d_bad_args(void)
+{
+    const int nx = 8, ny = 8, nz = 8, n = nx * ny * nz;
+    cheap_ctx_3d ctx = {0};
+    ASSERT_EQ(cheap_init_3d(&ctx, nx, ny, nz, 0.5, 0.5, 0.5), CHEAP_OK);
+
+    double *x = (double *)malloc((size_t)n * sizeof(double));
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+    double *y = (double *)malloc((size_t)n * sizeof(double));
+    fill_signal_3d(x, nx, ny, nz, 3u);
+    for (int i = 0; i < n; ++i) w[i] = 1.0;
+
+    ASSERT_EQ(cheap_apply_3d(NULL, x, w, y), CHEAP_EUNINIT);
+    cheap_ctx_3d zero = {0};
+    ASSERT_EQ(cheap_apply_3d(&zero, x, w, y), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_forward_3d(&zero, x), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_inverse_3d(&zero, y), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_apply_inplace_3d(&zero, w), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_forward_inplace_3d(&zero), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_inverse_inplace_3d(&zero), CHEAP_EUNINIT);
+
+    ASSERT_EQ(cheap_apply_3d(&ctx, NULL, w, y), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_apply_3d(&ctx, x, NULL, y), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_apply_3d(&ctx, x, w, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_apply_inplace_3d(&ctx, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_forward_3d(&ctx, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_inverse_3d(&ctx, NULL), CHEAP_EINVAL);
+
+    x[5] = (double)NAN;
+    ASSERT_EQ(cheap_apply_3d(&ctx, x, w, y), CHEAP_EDOM);
+    ASSERT_EQ(cheap_forward_3d(&ctx, x), CHEAP_EDOM);
+
+    ASSERT_TRUE(cheap_workspace_3d(NULL) == NULL);
+    ASSERT_TRUE(cheap_workspace_3d(&zero) == NULL);
+    ASSERT_TRUE(cheap_workspace_3d(&ctx) == ctx.workspace);
+
+    cheap_destroy_3d(&ctx);
+    free(x); free(w); free(y);
+}
+
+/* ---------- Phase 2.3: 3D weight constructors ---------- */
+
+static void test_weights_laplacian_3d(void)
+{
+    const int nx = 64, ny = 48, nz = 32;
+    const int n  = nx * ny * nz;
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian_3d(nx, ny, nz, w), CHEAP_OK);
+
+    ASSERT_NEAR(w[0], 0.0, 0.0);
+    int all_finite = 1, all_nonneg = 1;
+    for (int i = 0; i < n; ++i) {
+        if (!isfinite(w[i])) all_finite = 0;
+        if (w[i] < 0.0) all_nonneg = 0;
+    }
+    ASSERT_TRUE(all_finite);
+    ASSERT_TRUE(all_nonneg);
+
+    const int probes[][3] = {{0,0,0}, {0,5,0}, {7,0,0}, {0,0,3}, {13,21,11}, {nx-1,ny-1,nz-1}};
+    for (size_t p = 0; p < sizeof(probes)/sizeof(probes[0]); ++p) {
+        int j = probes[p][0], k = probes[p][1], l = probes[p][2];
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+        double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+        double expected = 4.0 * (sx * sx + sy * sy + sz * sz);
+        ASSERT_NEAR(w[(j * ny + k) * nz + l], expected, 1e-14);
+    }
+
+    for (int j = 1; j < nx; ++j) {
+        ASSERT_TRUE(w[j * ny * nz] >= w[(j - 1) * ny * nz] - 1e-15);
+    }
+    free(w);
+}
+
+static void test_weights_fractional_laplacian_3d_identity(void)
+{
+    const int nx = 16, ny = 16, nz = 16;
+    const int n = nx * ny * nz;
+    double *w0 = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_fractional_laplacian_3d(nx, ny, nz, 0.0, w0), CHEAP_OK);
+    for (int i = 0; i < n; ++i) ASSERT_NEAR(w0[i], 1.0, 1e-15);
+    free(w0);
+}
+
+static void test_weights_fractional_laplacian_3d_matches_laplacian(void)
+{
+    const int nx = 16, ny = 12, nz = 8;
+    const int n = nx * ny * nz;
+    double *wL = (double *)malloc((size_t)n * sizeof(double));
+    double *wF = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian_3d(nx, ny, nz, wL), CHEAP_OK);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_3d(nx, ny, nz, 1.0, wF), CHEAP_OK);
+    for (int i = 1; i < n; ++i) ASSERT_NEAR(wF[i], wL[i], 1e-12);
+    free(wL); free(wF);
+}
+
+static void test_weights_fractional_laplacian_3d_power_identity(void)
+{
+    const int nx = 8, ny = 10, nz = 6;
+    const int n = nx * ny * nz;
+    const double alphas[] = {0.2, 0.5, 1.3, 2.0, -0.75};
+    double *wL = (double *)malloc((size_t)n * sizeof(double));
+    double *wF = (double *)malloc((size_t)n * sizeof(double));
+    ASSERT_EQ(cheap_weights_laplacian_3d(nx, ny, nz, wL), CHEAP_OK);
+    for (size_t ai = 0; ai < sizeof(alphas)/sizeof(alphas[0]); ++ai) {
+        double alpha = alphas[ai];
+        ASSERT_EQ(cheap_weights_fractional_laplacian_3d(nx, ny, nz, alpha, wF), CHEAP_OK);
+        for (int i = 1; i < n; ++i) {
+            double recovered = pow(wF[i], 1.0 / alpha);
+            double rel = fabs(recovered - wL[i]) / fmax(fabs(wL[i]), 1.0);
+            ASSERT_TRUE(rel < 1e-10);
+        }
+    }
+    free(wL); free(wF);
+}
+
+static void test_weights_3d_bad_args(void)
+{
+    double w[64];
+    ASSERT_EQ(cheap_weights_laplacian_3d(1, 4, 4, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_laplacian_3d(4, 1, 4, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_laplacian_3d(4, 4, 1, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_laplacian_3d(4, 4, 4, NULL), CHEAP_EINVAL);
+
+    ASSERT_EQ(cheap_weights_fractional_laplacian_3d(1, 4, 4, 0.5, w), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_3d(4, 4, 4, 0.5, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_weights_fractional_laplacian_3d(4, 4, 4, (double)NAN, w), CHEAP_EINVAL);
+}
+
 int main(void)
 {
     printf("=== test_cheap_3d ===\n");
@@ -287,6 +563,16 @@ int main(void)
     test_init_from_eigenvalues_3d();              printf("  test_init_from_eigenvalues_3d\n");
     test_init_from_toeplitz_3d_matches_flandrin();printf("  test_init_from_toeplitz_3d_matches_flandrin\n");
     test_init_from_toeplitz_3d_bad_args();        printf("  test_init_from_toeplitz_3d_bad_args\n");
+    test_apply_3d_identity();                     printf("  test_apply_3d_identity\n");
+    test_forward_inverse_3d_roundtrip();          printf("  test_forward_inverse_3d_roundtrip\n");
+    test_apply_inplace_3d_matches_apply();        printf("  test_apply_inplace_3d_matches_apply\n");
+    test_forward_inverse_inplace_3d_equivalence();printf("  test_forward_inverse_inplace_3d_equivalence\n");
+    test_apply_3d_bad_args();                     printf("  test_apply_3d_bad_args\n");
+    test_weights_laplacian_3d();                  printf("  test_weights_laplacian_3d\n");
+    test_weights_fractional_laplacian_3d_identity();printf("  test_weights_fractional_laplacian_3d_identity\n");
+    test_weights_fractional_laplacian_3d_matches_laplacian();printf("  test_weights_fractional_laplacian_3d_matches_laplacian\n");
+    test_weights_fractional_laplacian_3d_power_identity();printf("  test_weights_fractional_laplacian_3d_power_identity\n");
+    test_weights_3d_bad_args();                   printf("  test_weights_3d_bad_args\n");
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;

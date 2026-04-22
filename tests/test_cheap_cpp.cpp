@@ -399,6 +399,163 @@ static void test_weights_rmt_cpp() {
 }
 
 /* =========================================================================
+ * Section: Context2D / Context3D tests
+ * ========================================================================= */
+
+static void test_context2d_lifecycle() {
+    cheap::Context2D ctx(16, 32, 0.3, 0.7);
+    ASSERT_EQ(ctx.nx(), 16);
+    ASSERT_EQ(ctx.ny(), 32);
+    ASSERT_EQ(ctx.n(), 16 * 32);
+    ASSERT_NEAR(ctx.Hx(), 0.3, 1e-15);
+    ASSERT_NEAR(ctx.Hy(), 0.7, 1e-15);
+    ASSERT_TRUE(ctx.lambda() != nullptr);
+    ASSERT_TRUE(ctx.workspace() != nullptr);
+    ASSERT_TRUE(ctx.ctx()->is_initialized == 1);
+}
+
+static void test_context2d_invalid_params() {
+    ASSERT_THROWS_CODE(cheap::Context2D(1, 16, 0.5, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context2D(16, 1, 0.5, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context2D(16, 16, 0.0, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context2D(16, 16, 0.5, 1.0), cheap::ErrorCode::einval);
+}
+
+static void test_context2d_move() {
+    cheap::Context2D a(8, 8, 0.5, 0.5);
+    const double* a_lambda = a.lambda();
+    cheap::Context2D b(std::move(a));
+    ASSERT_EQ(b.nx(), 8);
+    ASSERT_TRUE(b.lambda() == a_lambda);
+    ASSERT_TRUE(a.ctx()->is_initialized == 0);
+
+    cheap::Context2D c(4, 4, 0.3, 0.3);
+    c = std::move(b);
+    ASSERT_EQ(c.nx(), 8);
+    ASSERT_TRUE(c.lambda() == a_lambda);
+    ASSERT_TRUE(b.ctx()->is_initialized == 0);
+}
+
+static void test_context2d_apply_roundtrip() {
+    const int nx = 16, ny = 16, n = nx * ny;
+    cheap::Context2D ctx(nx, ny, 0.5, 0.5);
+
+    std::vector<double> input(n);
+    for (int i = 0; i < n; ++i) input[i] = std::sin(0.1 * i) + 0.5;
+
+    std::vector<double> ones(n, 1.0);
+    std::vector<double> output(n);
+    ctx.apply(input.data(), ones.data(), output.data());
+
+    for (int i = 0; i < n; ++i)
+        ASSERT_NEAR(output[i], input[i], 1e-10);
+}
+
+static void test_context2d_convenience() {
+    const int nx = 8, ny = 8, n = nx * ny;
+    cheap::Context2D ctx(nx, ny, 0.5, 0.5);
+    std::vector<double> input(n);
+    std::vector<double> weights(n, 1.0);
+    for (int i = 0; i < n; ++i) input[i] = static_cast<double>(i);
+
+    auto result = ctx.apply(input.data(), weights.data());
+    ASSERT_EQ(static_cast<int>(result.size()), n);
+    for (int i = 0; i < n; ++i)
+        ASSERT_NEAR(result[i], input[i], 1e-10);
+}
+
+static void test_context3d_lifecycle() {
+    cheap::Context3D ctx(4, 8, 16, 0.3, 0.5, 0.7);
+    ASSERT_EQ(ctx.nx(), 4);
+    ASSERT_EQ(ctx.ny(), 8);
+    ASSERT_EQ(ctx.nz(), 16);
+    ASSERT_EQ(ctx.n(), 4 * 8 * 16);
+    ASSERT_NEAR(ctx.Hx(), 0.3, 1e-15);
+    ASSERT_NEAR(ctx.Hy(), 0.5, 1e-15);
+    ASSERT_NEAR(ctx.Hz(), 0.7, 1e-15);
+    ASSERT_TRUE(ctx.lambda() != nullptr);
+    ASSERT_TRUE(ctx.workspace() != nullptr);
+    ASSERT_TRUE(ctx.ctx()->is_initialized == 1);
+}
+
+static void test_context3d_invalid_params() {
+    ASSERT_THROWS_CODE(cheap::Context3D(1, 8, 8, 0.5, 0.5, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context3D(8, 1, 8, 0.5, 0.5, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context3D(8, 8, 1, 0.5, 0.5, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context3D(8, 8, 8, 0.0, 0.5, 0.5), cheap::ErrorCode::einval);
+    ASSERT_THROWS_CODE(cheap::Context3D(8, 8, 8, 0.5, 1.0, 0.5), cheap::ErrorCode::einval);
+}
+
+static void test_context3d_apply_roundtrip() {
+    const int nx = 8, ny = 8, nz = 8, n = nx * ny * nz;
+    cheap::Context3D ctx(nx, ny, nz, 0.5, 0.5, 0.5);
+
+    std::vector<double> input(n);
+    for (int i = 0; i < n; ++i) input[i] = std::sin(0.1 * i) + 0.5;
+
+    std::vector<double> ones(n, 1.0);
+    std::vector<double> output(n);
+    ctx.apply(input.data(), ones.data(), output.data());
+
+    for (int i = 0; i < n; ++i)
+        ASSERT_NEAR(output[i], input[i], 1e-10);
+}
+
+static void test_weights_laplacian_2d_cpp() {
+    auto w = cheap::weights_laplacian_2d(16, 16);
+    ASSERT_EQ(static_cast<int>(w.size()), 16 * 16);
+    ASSERT_NEAR(w[0], 0.0, 1e-16);
+    for (size_t i = 0; i < w.size(); ++i) {
+        ASSERT_TRUE(w[i] >= 0.0);
+        ASSERT_TRUE(std::isfinite(w[i]));
+    }
+}
+
+static void test_weights_laplacian_3d_cpp() {
+    auto w = cheap::weights_laplacian_3d(8, 8, 8);
+    ASSERT_EQ(static_cast<int>(w.size()), 8 * 8 * 8);
+    ASSERT_NEAR(w[0], 0.0, 1e-16);
+    for (size_t i = 0; i < w.size(); ++i) {
+        ASSERT_TRUE(w[i] >= 0.0);
+        ASSERT_TRUE(std::isfinite(w[i]));
+    }
+}
+
+#ifdef CHEAP_HAS_SPAN
+static void test_context2d_span_overloads() {
+    const int nx = 8, ny = 8, n = nx * ny;
+    cheap::Context2D ctx(nx, ny, 0.5, 0.5);
+
+    std::vector<double> input(n);
+    for (int i = 0; i < n; ++i) input[i] = static_cast<double>(i);
+
+    std::vector<double> ones(n, 1.0);
+    std::vector<double> output(n);
+
+    ctx.apply(std::span<const double>(input), std::span<const double>(ones),
+              std::span<double>(output));
+    for (int i = 0; i < n; ++i)
+        ASSERT_NEAR(output[i], input[i], 1e-10);
+}
+
+static void test_context3d_span_overloads() {
+    const int nx = 4, ny = 4, nz = 4, n = nx * ny * nz;
+    cheap::Context3D ctx(nx, ny, nz, 0.5, 0.5, 0.5);
+
+    std::vector<double> input(n);
+    for (int i = 0; i < n; ++i) input[i] = static_cast<double>(i);
+
+    std::vector<double> ones(n, 1.0);
+    std::vector<double> output(n);
+
+    ctx.apply(std::span<const double>(input), std::span<const double>(ones),
+              std::span<double>(output));
+    for (int i = 0; i < n; ++i)
+        ASSERT_NEAR(output[i], input[i], 1e-10);
+}
+#endif
+
+/* =========================================================================
  * main
  * ========================================================================= */
 
@@ -435,6 +592,24 @@ int main() {
     RUN_TEST(test_weights_kpca_soft_cpp);
     RUN_TEST(test_weights_mandelbrot_cpp);
     RUN_TEST(test_weights_rmt_cpp);
+
+    std::fprintf(stderr, "\n  --- Context2D / Context3D ---\n");
+    RUN_TEST(test_context2d_lifecycle);
+    RUN_TEST(test_context2d_invalid_params);
+    RUN_TEST(test_context2d_move);
+    RUN_TEST(test_context2d_apply_roundtrip);
+    RUN_TEST(test_context2d_convenience);
+    RUN_TEST(test_context3d_lifecycle);
+    RUN_TEST(test_context3d_invalid_params);
+    RUN_TEST(test_context3d_apply_roundtrip);
+    RUN_TEST(test_weights_laplacian_2d_cpp);
+    RUN_TEST(test_weights_laplacian_3d_cpp);
+
+#ifdef CHEAP_HAS_SPAN
+    std::fprintf(stderr, "\n  --- 2D/3D span overloads ---\n");
+    RUN_TEST(test_context2d_span_overloads);
+    RUN_TEST(test_context3d_span_overloads);
+#endif
 
     std::fprintf(stderr, "\n%d tests, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed ? 1 : 0;

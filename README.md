@@ -1,8 +1,8 @@
 # CHEAP
 
-**Circulant Hessian Efficient Algorithm Package:** a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices.
+**Circulant Hessian Efficient Algorithm Package:** a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices. Supports 1D, 2D, and 3D grids via separable DCT diagonalization.
 
-CHEAP turns cubic-time kernel methods into fast spectral operations by exploiting the fact that stationary covariance matrices (Toeplitz) diagonalizes in the DCT-II basis. One forward DCT, one pointwise multiply, one inverse DCT: that's the entire algorithm for kernel regression, optimal transport, Gaussian sampling, control, and fractional calculus.
+CHEAP turns cubic-time kernel methods into fast spectral operations by exploiting the fact that stationary covariance matrices (Toeplitz) diagonalize in the DCT-II basis. One forward DCT, one pointwise multiply, one inverse DCT: that's the entire algorithm for kernel regression, optimal transport, Gaussian sampling, control, and fractional calculus.
 
 On N=65,536 problems, CHEAP delivers 400-1000x speedups over Cholesky/LAPACK baselines using O(N) memory.
 
@@ -26,6 +26,8 @@ The choice of weight vector determines the operation:
 | Toeplitz matvec / solve | `DCT(first_col)[k]` | O(N log N) |
 | Kalman prediction | `P[k] + lambda[k]` | O(N) |
 | Wiener filter | `lk / (lk + sigma^2)` | O(N log N) |
+| 2D/3D Laplacian | sum of `4sin²` terms | O(N log N) |
+| 2D/3D fractional Laplacian | `(laplacian)^α` | O(N log N) |
 | Spectral normalization | `1 / sqrt(lk + eps)` | O(N log N) |
 | Kernel PCA (hard/soft) | `I(k < K)` / soft variant | O(N log N) |
 | Mandelbrot multifractal | `abs(Gamma(H+it)/Gamma(1-H+it))` | O(N log N) |
@@ -53,6 +55,25 @@ int main(void) {
 
     cheap_destroy(&ctx);
 }
+```
+
+### 2D Poisson solver (C)
+
+```c
+cheap_ctx_2d ctx;
+cheap_init_2d(&ctx, 128, 128, 0.5, 0.5);
+
+double f[128*128], phi[128*128], w[128*128];
+/* ... fill RHS f ... */
+
+cheap_weights_laplacian_2d(128, 128, w);
+w[0] = 1.0;  /* DC regularization */
+
+cheap_forward_2d(&ctx, f);
+for (int i = 0; i < 128*128; ++i) ctx.workspace[i] /= w[i];
+cheap_inverse_2d(&ctx, phi);  /* solves -Δφ = f */
+
+cheap_destroy_2d(&ctx);
 ```
 
 ### C++ API
@@ -128,7 +149,7 @@ cheap_toeplitz_solve_precomp(&ctx, lam, y, /*reg=*/1e-4, x);
 cheap_destroy(&ctx);
 ```
 
-More examples in [`examples/`](examples/): GP regression, optimal transport, LQR/MPC control, fractional calculus, Poisson solver, Navier-Stokes dissipation, online kernel filtering, Wiener denoising, RMT denoising.
+More examples in [`examples/`](examples/): GP regression, optimal transport, LQR/MPC control, fractional calculus, Poisson solver (2D/3D), Navier-Stokes dissipation (2D/3D), online kernel filtering, Wiener denoising (2D), RMT denoising, GP regression (2D), Toeplitz solve (2D).
 
 ## API Overview
 
@@ -237,25 +258,28 @@ Run benchmarks:
 
 ```
 include/
-  cheap.h        — C99 header (~750 lines, entire implementation)
-  cheap.hpp      — C++17 RAII wrapper
+  cheap.h        — C99 header (~2200 lines, entire implementation)
+  cheap.hpp      — C++17 RAII wrapper (1D + 2D + 3D)
 tests/
-  test_cheap.c   — C test suite
-  test_cheap_cpp.cpp
+  test_cheap.c   — C test suite (1D)
+  test_cheap_2d.c — 2D correctness + SIMD equivalence
+  test_cheap_3d.c — 3D correctness
+  test_cheap_cpp.cpp — C++ wrapper tests
 benchmarks/
-  bench_cheap.c  — quick benchmarks
+  bench_cheap.c  — quick benchmarks (1D + 2D + 3D)
   bench_cheap_cpp.cpp
 examples/
   c/             — C99 examples
     gp_regression.c, optimal_transport.c, lqr_mpc.c,
     fractional_diff.c, poisson_solver.c, ns_dissipation.c,
     toeplitz_solve.c, online_filter.c, wiener_denoise.c,
-    rmt_denoise.c
+    rmt_denoise.c,
+    poisson_solver_2d.c, poisson_solver_3d.c,
+    wiener_denoise_2d.c,
+    ns_dissipation_2d.c, ns_dissipation_3d.c,
+    gp_regression_2d.c, toeplitz_solve_2d.c
   cpp/           — C++17 equivalents
-    gp_regression.cpp, optimal_transport.cpp, lqr_mpc.cpp,
-    fractional_diff.cpp, poisson_solver.cpp, ns_dissipation.cpp,
-    toeplitz_solve.cpp, online_filter.cpp, wiener_denoise.cpp,
-    rmt_denoise.cpp
+    (same names as c/ with .cpp extension)
 ```
 
 ## When to Use CHEAP

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(CHEAP VERSION 0.1.1 LANGUAGES C)
+project(CHEAP VERSION 0.2.0 LANGUAGES C)
 
 # ---------------------------------------------------------------------------
 # Language standard
@@ -166,6 +166,13 @@ set(CHEAP_EXAMPLES_C
     online_filter
     wiener_denoise
     rmt_denoise
+    poisson_solver_2d
+    poisson_solver_3d
+    wiener_denoise_2d
+    ns_dissipation_2d
+    ns_dissipation_3d
+    gp_regression_2d
+    toeplitz_solve_2d
 )
 
 foreach(example ${CHEAP_EXAMPLES_C})
@@ -217,6 +224,13 @@ if(CHEAP_BUILD_CPP)
         online_filter
         wiener_denoise
         rmt_denoise
+        poisson_solver_2d
+        poisson_solver_3d
+        wiener_denoise_2d
+        ns_dissipation_2d
+        ns_dissipation_3d
+        gp_regression_2d
+        toeplitz_solve_2d
     )
 
     foreach(example ${CHEAP_EXAMPLES_CPP})

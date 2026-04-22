@@ -44,12 +44,33 @@
  *   ~162 cycles/el → target 18–25 cycles/el. AVX2 target: 8–12.
  *   See BENCH.md for full before/after tables.
  * ----------------------------------------------------------------
+ * v0.2.0-tensor — 2D/3D extension
+ * ----------------------------------------------------------------
+ * New contexts:
+ *   - `cheap_ctx_2d` / `cheap_ctx_3d` with tensor-product Flandrin spectra
+ *   - `cheap_init_2d/3d`, `cheap_init_from_eigenvalues_2d/3d`,
+ *     `cheap_init_from_toeplitz_2d/3d`
+ *
+ * Transforms (normalization: 1/(4·nx·ny) in 2D, 1/(8·nx·ny·nz) in 3D):
+ *   - `cheap_forward_2d/3d`, `cheap_inverse_2d/3d`, `cheap_apply_2d/3d`
+ *   - In-place variants: `cheap_*_inplace_2d/3d`
+ *
+ * 2D / 3D weight constructors (new):
+ *   - `cheap_weights_laplacian_2d/3d`
+ *   - `cheap_weights_fractional_laplacian_2d/3d`
+ *
+ * Dimension-agnostic (pass flat nx*ny or nx*ny*nz as `n`):
+ *   - `_ev` family: `wiener_ev`, `specnorm_ev`
+ *   - `kpca_hard`, `kpca_soft`, `rmt_hard`, `rmt_shrink`
+ *
+ * C++ wrapper: `cheap::Context2D`, `cheap::Context3D` with span overloads.
+ * ----------------------------------------------------------------
  */
 
 #define CHEAP_VERSION_MAJOR 0
-#define CHEAP_VERSION_MINOR 1
-#define CHEAP_VERSION_PATCH 1
-#define CHEAP_VERSION "0.1.1-metal"
+#define CHEAP_VERSION_MINOR 2
+#define CHEAP_VERSION_PATCH 0
+#define CHEAP_VERSION "0.2.0-tensor"
 
 #include <fftw3.h>
 #include <math.h>
@@ -1093,6 +1114,92 @@ static inline double* cheap_workspace_2d(cheap_ctx_2d* ctx)
 }
 
 /* ============================================================
+ * 3D spectral primitives: forward, inverse, apply
+ *
+ * Operate on the flat row-major nx*ny*nz workspace of cheap_ctx_3d.
+ * Normalization is 1/(8*nx*ny*nz) — each DCT axis contributes a
+ * factor of 2N_axis under the FFTW REDFT10/REDFT01 convention.
+ * ============================================================ */
+
+static inline int cheap_forward_3d(cheap_ctx_3d* restrict ctx,
+                                     const double* restrict input)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!input) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
+    memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
+    fftw_execute(ctx->plan_fwd);
+    return CHEAP_OK;
+}
+
+static inline int cheap_forward_inplace_3d(cheap_ctx_3d* restrict ctx)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    fftw_execute(ctx->plan_fwd);
+    return CHEAP_OK;
+}
+
+static inline int cheap_inverse_3d(cheap_ctx_3d* restrict ctx,
+                                     double* restrict output)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!output) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (8.0 * (double)ctx->nx * (double)ctx->ny * (double)ctx->nz);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(output, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+static inline int cheap_inverse_inplace_3d(cheap_ctx_3d* restrict ctx)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    const int n = ctx->n;
+    const double norm = 1.0 / (8.0 * (double)ctx->nx * (double)ctx->ny * (double)ctx->nz);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(ctx->workspace, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+static inline int cheap_apply_3d(cheap_ctx_3d* restrict ctx,
+                                   const double* restrict input,
+                                   const double* restrict weights,
+                                   double* restrict output)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!input || !weights || !output) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (8.0 * (double)ctx->nx * (double)ctx->ny * (double)ctx->nz);
+    for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
+    memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
+    fftw_execute(ctx->plan_fwd);
+    cheap__mul_inplace(ctx->workspace, weights, n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(output, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+static inline int cheap_apply_inplace_3d(cheap_ctx_3d* restrict ctx,
+                                           const double* restrict weights)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!weights) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (8.0 * (double)ctx->nx * (double)ctx->ny * (double)ctx->nz);
+    fftw_execute(ctx->plan_fwd);
+    cheap__mul_inplace(ctx->workspace, weights, n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(ctx->workspace, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+static inline double* cheap_workspace_3d(cheap_ctx_3d* ctx)
+{
+    return (ctx && ctx->is_initialized) ? ctx->workspace : NULL;
+}
+
+/* ============================================================
  * Sinkhorn optimal transport (max-log stabilized)
  * ============================================================ */
 
@@ -1373,6 +1480,69 @@ static inline int cheap_weights_fractional_laplacian_2d(int nx, int ny,
         }
     }
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_laplacian_3d — Isotropic 3D Laplacian eigenvalues.
+ *
+ *   w[(j*ny+k)*nz + l] = 4*sin^2(pi*j/(2*nx)) + 4*sin^2(pi*k/(2*ny))
+ *                        + 4*sin^2(pi*l/(2*nz))
+ *
+ * Neumann-BC discrete 3D Laplacian on an nx*ny*nz grid, row-major layout.
+ * w[0] = 0 exactly (DC). Does NOT require a cheap_ctx_3d.
+ */
+static inline int cheap_weights_laplacian_3d(int nx, int ny, int nz,
+                                               double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                double lz = 4.0 * sz * sz;
+                weights_out[(j * ny + k) * nz + l] = lx + ly + lz;
+            }
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny * nz);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_fractional_laplacian_3d — (-Delta)^alpha on a 3D grid.
+ *
+ *   w[(j*ny+k)*nz+l] = ( 4*sin^2(pi*j/(2*nx)) + 4*sin^2(pi*k/(2*ny))
+ *                        + 4*sin^2(pi*l/(2*nz)) )^alpha
+ *
+ * alpha > 0: fractional Laplacian. alpha < 0: fractional inverse.
+ * alpha = 0: identity. DC floored to CHEAP_EPS_LOG before pow().
+ * Does NOT require a cheap_ctx_3d.
+ */
+static inline int cheap_weights_fractional_laplacian_3d(int nx, int ny, int nz,
+                                                          double alpha,
+                                                          double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || !weights_out || !isfinite(alpha)) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                double v  = lx + ly + 4.0 * sz * sz;
+                if (v < CHEAP_EPS_LOG) v = CHEAP_EPS_LOG;
+                weights_out[(j * ny + k) * nz + l] = pow(v, alpha);
+            }
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny * nz);
     return CHEAP_OK;
 }
 

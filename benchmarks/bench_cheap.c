@@ -471,6 +471,216 @@ static void run_apply_weight_benchmarks(int n)
 }
 
 /* =========================================================================
+ * 2D / 3D core benchmarks
+ * ========================================================================= */
+
+typedef struct { cheap_ctx_2d ctx; double *input; double *weights; double *output; } apply_2d_state;
+static void bench_apply_2d(void *p) {
+    apply_2d_state *s = (apply_2d_state *)p;
+    cheap_apply_2d(&s->ctx, s->input, s->weights, s->output);
+}
+static void bench_apply_2d_inplace(void *p) {
+    apply_2d_state *s = (apply_2d_state *)p;
+    memcpy(s->ctx.workspace, s->input, (size_t)s->ctx.n * sizeof(double));
+    cheap_apply_inplace_2d(&s->ctx, s->weights);
+}
+
+typedef struct { cheap_ctx_2d ctx; double *input; double *output; } fwd_inv_2d_state;
+static void bench_forward_2d(void *p) {
+    fwd_inv_2d_state *s = (fwd_inv_2d_state *)p;
+    cheap_forward_2d(&s->ctx, s->input);
+}
+static void bench_inverse_2d(void *p) {
+    fwd_inv_2d_state *s = (fwd_inv_2d_state *)p;
+    cheap_inverse_2d(&s->ctx, s->output);
+}
+
+static void run_core_benchmarks_2d(int nx, int ny)
+{
+    const int n = nx * ny;
+    const double H = 0.7;
+
+    /* apply_2d with KRR weights */
+    {
+        apply_2d_state *s = (apply_2d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_2d(&s->ctx, nx, ny, H, H));
+        s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->output  = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
+        for (int k = 0; k < n; ++k) s->weights[k] = 1.0 / (s->ctx.lambda[k] + 1e-3);
+        bench_stats st;
+        run_bench(bench_apply_2d, s, n, &st);
+        print_result("apply_krr_2d", n, &st);
+        cheap_destroy_2d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->weights); fftw_free(s->output); free(s);
+    }
+    /* apply_2d_inplace */
+    {
+        apply_2d_state *s = (apply_2d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_2d(&s->ctx, nx, ny, H, H));
+        s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
+        for (int k = 0; k < n; ++k) s->weights[k] = 1.0 / (s->ctx.lambda[k] + 1e-3);
+        bench_stats st;
+        run_bench(bench_apply_2d_inplace, s, n, &st);
+        print_result("apply_krr_2d_inplace", n, &st);
+        cheap_destroy_2d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->weights); free(s);
+    }
+    /* forward_2d */
+    {
+        fwd_inv_2d_state *s = (fwd_inv_2d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_2d(&s->ctx, nx, ny, H, H));
+        s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
+        bench_stats st;
+        run_bench(bench_forward_2d, s, n, &st);
+        print_result("forward_2d", n, &st);
+        cheap_destroy_2d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->output); free(s);
+    }
+    /* inverse_2d */
+    {
+        fwd_inv_2d_state *s = (fwd_inv_2d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_2d(&s->ctx, nx, ny, H, H));
+        s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
+        cheap_forward_2d(&s->ctx, s->input);
+        bench_stats st;
+        run_bench(bench_inverse_2d, s, n, &st);
+        print_result("inverse_2d", n, &st);
+        cheap_destroy_2d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->output); free(s);
+    }
+}
+
+typedef struct { cheap_ctx_3d ctx; double *input; double *weights; double *output; } apply_3d_state;
+static void bench_apply_3d(void *p) {
+    apply_3d_state *s = (apply_3d_state *)p;
+    cheap_apply_3d(&s->ctx, s->input, s->weights, s->output);
+}
+static void bench_apply_3d_inplace(void *p) {
+    apply_3d_state *s = (apply_3d_state *)p;
+    memcpy(s->ctx.workspace, s->input, (size_t)s->ctx.n * sizeof(double));
+    cheap_apply_inplace_3d(&s->ctx, s->weights);
+}
+
+typedef struct { cheap_ctx_3d ctx; double *input; double *output; } fwd_inv_3d_state;
+static void bench_forward_3d(void *p) {
+    fwd_inv_3d_state *s = (fwd_inv_3d_state *)p;
+    cheap_forward_3d(&s->ctx, s->input);
+}
+static void bench_inverse_3d(void *p) {
+    fwd_inv_3d_state *s = (fwd_inv_3d_state *)p;
+    cheap_inverse_3d(&s->ctx, s->output);
+}
+
+static void run_core_benchmarks_3d(int nx, int ny, int nz)
+{
+    const int n = nx * ny * nz;
+    const double H = 0.7;
+
+    /* apply_3d with KRR weights */
+    {
+        apply_3d_state *s = (apply_3d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_3d(&s->ctx, nx, ny, nz, H, H, H));
+        s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->output  = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
+        for (int k = 0; k < n; ++k) s->weights[k] = 1.0 / (s->ctx.lambda[k] + 1e-3);
+        bench_stats st;
+        run_bench(bench_apply_3d, s, n, &st);
+        print_result("apply_krr_3d", n, &st);
+        cheap_destroy_3d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->weights); fftw_free(s->output); free(s);
+    }
+    /* apply_3d_inplace */
+    {
+        apply_3d_state *s = (apply_3d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_3d(&s->ctx, nx, ny, nz, H, H, H));
+        s->input   = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->weights = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n) + 1.0;
+        for (int k = 0; k < n; ++k) s->weights[k] = 1.0 / (s->ctx.lambda[k] + 1e-3);
+        bench_stats st;
+        run_bench(bench_apply_3d_inplace, s, n, &st);
+        print_result("apply_krr_3d_inplace", n, &st);
+        cheap_destroy_3d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->weights); free(s);
+    }
+    /* forward_3d */
+    {
+        fwd_inv_3d_state *s = (fwd_inv_3d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_3d(&s->ctx, nx, ny, nz, H, H, H));
+        s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
+        bench_stats st;
+        run_bench(bench_forward_3d, s, n, &st);
+        print_result("forward_3d", n, &st);
+        cheap_destroy_3d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->output); free(s);
+    }
+    /* inverse_3d */
+    {
+        fwd_inv_3d_state *s = (fwd_inv_3d_state *)malloc(sizeof(*s));
+        CHECK_RC(cheap_init_3d(&s->ctx, nx, ny, nz, H, H, H));
+        s->input  = (double *)fftw_malloc((size_t)n * sizeof(double));
+        s->output = (double *)fftw_malloc((size_t)n * sizeof(double));
+        for (int i = 0; i < n; ++i) s->input[i] = sin(2.0 * M_PI * i / n);
+        cheap_forward_3d(&s->ctx, s->input);
+        bench_stats st;
+        run_bench(bench_inverse_3d, s, n, &st);
+        print_result("inverse_3d", n, &st);
+        cheap_destroy_3d(&s->ctx);
+        fftw_free(s->input); fftw_free(s->output); free(s);
+    }
+}
+
+/* =========================================================================
+ * 2D / 3D weight constructor benchmarks
+ * ========================================================================= */
+
+typedef struct { int nx, ny; double* w; } weight_2d_state;
+static void bench_weights_laplacian_2d(void *p) {
+    weight_2d_state *s = (weight_2d_state *)p;
+    cheap_weights_laplacian_2d(s->nx, s->ny, s->w);
+}
+
+static void run_weight_benchmarks_2d(int nx, int ny)
+{
+    weight_2d_state *s = (weight_2d_state *)malloc(sizeof(*s));
+    s->nx = nx; s->ny = ny;
+    s->w = (double *)fftw_malloc((size_t)(nx * ny) * sizeof(double));
+    bench_stats st;
+    run_bench(bench_weights_laplacian_2d, s, nx * ny, &st);
+    print_result("wt_laplacian_2d", nx * ny, &st);
+    fftw_free(s->w); free(s);
+}
+
+typedef struct { int nx, ny, nz; double* w; } weight_3d_state;
+static void bench_weights_laplacian_3d(void *p) {
+    weight_3d_state *s = (weight_3d_state *)p;
+    cheap_weights_laplacian_3d(s->nx, s->ny, s->nz, s->w);
+}
+
+static void run_weight_benchmarks_3d(int nx, int ny, int nz)
+{
+    weight_3d_state *s = (weight_3d_state *)malloc(sizeof(*s));
+    s->nx = nx; s->ny = ny; s->nz = nz;
+    s->w = (double *)fftw_malloc((size_t)(nx * ny * nz) * sizeof(double));
+    bench_stats st;
+    run_bench(bench_weights_laplacian_3d, s, nx * ny * nz, &st);
+    print_result("wt_laplacian_3d", nx * ny * nz, &st);
+    fftw_free(s->w); free(s);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 int main(void)
@@ -498,6 +708,24 @@ int main(void)
     /* End-to-end apply with weight computation */
     for (int i = 0; i < nsizes; ++i)
         run_apply_weight_benchmarks(sizes[i]);
+
+    /* 2D core */
+    {
+        int sizes_2d[][2] = {{64, 64}, {128, 128}, {256, 256}, {512, 512}};
+        for (size_t i = 0; i < sizeof(sizes_2d)/sizeof(sizes_2d[0]); ++i)
+            run_core_benchmarks_2d(sizes_2d[i][0], sizes_2d[i][1]);
+    }
+
+    /* 3D core */
+    {
+        int sizes_3d[][3] = {{16, 16, 16}, {32, 32, 32}, {64, 64, 64}};
+        for (size_t i = 0; i < sizeof(sizes_3d)/sizeof(sizes_3d[0]); ++i)
+            run_core_benchmarks_3d(sizes_3d[i][0], sizes_3d[i][1], sizes_3d[i][2]);
+    }
+
+    /* 2D / 3D weight constructors */
+    run_weight_benchmarks_2d(128, 128);
+    run_weight_benchmarks_3d(32, 32, 32);
 
     return 0;
 }

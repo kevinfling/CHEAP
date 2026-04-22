@@ -401,6 +401,276 @@ private:
 };
 
 /* ============================================================
+ * Context2D — RAII wrapper for cheap_ctx_2d
+ * ============================================================ */
+
+class Context2D {
+public:
+    Context2D(int nx, int ny, double Hx, double Hy) {
+        detail::check(cheap_init_2d(&ctx_, nx, ny, Hx, Hy));
+    }
+
+    ~Context2D() noexcept {
+        cheap_destroy_2d(&ctx_);
+    }
+
+    Context2D(Context2D&& other) noexcept : ctx_(other.ctx_) {
+        std::memset(&other.ctx_, 0, sizeof(cheap_ctx_2d));
+    }
+
+    Context2D& operator=(Context2D&& other) noexcept {
+        if (this != &other) {
+            cheap_destroy_2d(&ctx_);
+            ctx_ = other.ctx_;
+            std::memset(&other.ctx_, 0, sizeof(cheap_ctx_2d));
+        }
+        return *this;
+    }
+
+    Context2D(const Context2D&) = delete;
+    Context2D& operator=(const Context2D&) = delete;
+
+    /* --- Core spectral primitives --- */
+
+    void forward(const double* input) { detail::check(try_forward(input)); }
+    int try_forward(const double* input) noexcept { return cheap_forward_2d(&ctx_, input); }
+
+    void forward_inplace() { detail::check(try_forward_inplace()); }
+    int try_forward_inplace() noexcept { return cheap_forward_inplace_2d(&ctx_); }
+
+    void inverse(double* output) { detail::check(try_inverse(output)); }
+    int try_inverse(double* output) noexcept { return cheap_inverse_2d(&ctx_, output); }
+
+    void inverse_inplace() { detail::check(try_inverse_inplace()); }
+    int try_inverse_inplace() noexcept { return cheap_inverse_inplace_2d(&ctx_); }
+
+    void apply(const double* input, const double* weights, double* output) {
+        detail::check(try_apply(input, weights, output));
+    }
+    int try_apply(const double* input, const double* weights, double* output) noexcept {
+        return cheap_apply_2d(&ctx_, input, weights, output);
+    }
+
+    std::vector<double> apply(const double* input, const double* weights) {
+        std::vector<double> out(static_cast<std::size_t>(ctx_.n));
+        apply(input, weights, out.data());
+        return out;
+    }
+
+    void apply_inplace(const double* weights) { detail::check(try_apply_inplace(weights)); }
+    int try_apply_inplace(const double* weights) noexcept {
+        return cheap_apply_inplace_2d(&ctx_, weights);
+    }
+
+    /* --- Span overloads (C++20) --- */
+
+#ifdef CHEAP_HAS_SPAN
+    void forward(std::span<const double> input) {
+        if (static_cast<int>(input.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        forward(input.data());
+    }
+
+    void inverse(std::span<double> output) {
+        if (static_cast<int>(output.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        inverse(output.data());
+    }
+
+    void apply(std::span<const double> input, std::span<const double> weights,
+               std::span<double> output) {
+        if (static_cast<int>(input.size()) != ctx_.n ||
+            static_cast<int>(weights.size()) != ctx_.n ||
+            static_cast<int>(output.size()) != ctx_.n)
+            throw Error(CHEAP_EINVAL);
+        apply(input.data(), weights.data(), output.data());
+    }
+
+    std::vector<double> apply(std::span<const double> input,
+                              std::span<const double> weights) {
+        if (static_cast<int>(input.size()) != ctx_.n ||
+            static_cast<int>(weights.size()) != ctx_.n)
+            throw Error(CHEAP_EINVAL);
+        return apply(input.data(), weights.data());
+    }
+
+    void apply_inplace(std::span<const double> weights) {
+        if (static_cast<int>(weights.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        apply_inplace(weights.data());
+    }
+#endif
+
+    /* --- Accessors --- */
+
+    int nx() const noexcept { return ctx_.nx; }
+    int ny() const noexcept { return ctx_.ny; }
+    int n() const noexcept { return ctx_.n; }
+    double Hx() const noexcept { return ctx_.current_Hx; }
+    double Hy() const noexcept { return ctx_.current_Hy; }
+
+    const double* lambda() const noexcept { return ctx_.lambda; }
+    const double* sqrt_lambda() const noexcept { return ctx_.sqrt_lambda; }
+
+    double* workspace() noexcept { return ctx_.workspace; }
+    const double* workspace() const noexcept { return ctx_.workspace; }
+
+#ifdef CHEAP_HAS_SPAN
+    std::span<const double> lambda_span() const noexcept {
+        return {ctx_.lambda, static_cast<std::size_t>(ctx_.n)};
+    }
+    std::span<const double> sqrt_lambda_span() const noexcept {
+        return {ctx_.sqrt_lambda, static_cast<std::size_t>(ctx_.n)};
+    }
+    std::span<double> workspace_span() noexcept {
+        return {ctx_.workspace, static_cast<std::size_t>(ctx_.n)};
+    }
+    std::span<const double> workspace_span() const noexcept {
+        return {ctx_.workspace, static_cast<std::size_t>(ctx_.n)};
+    }
+#endif
+
+    cheap_ctx_2d* ctx() noexcept { return &ctx_; }
+    const cheap_ctx_2d* ctx() const noexcept { return &ctx_; }
+
+private:
+    cheap_ctx_2d ctx_{};
+};
+
+/* ============================================================
+ * Context3D — RAII wrapper for cheap_ctx_3d
+ * ============================================================ */
+
+class Context3D {
+public:
+    Context3D(int nx, int ny, int nz, double Hx, double Hy, double Hz) {
+        detail::check(cheap_init_3d(&ctx_, nx, ny, nz, Hx, Hy, Hz));
+    }
+
+    ~Context3D() noexcept {
+        cheap_destroy_3d(&ctx_);
+    }
+
+    Context3D(Context3D&& other) noexcept : ctx_(other.ctx_) {
+        std::memset(&other.ctx_, 0, sizeof(cheap_ctx_3d));
+    }
+
+    Context3D& operator=(Context3D&& other) noexcept {
+        if (this != &other) {
+            cheap_destroy_3d(&ctx_);
+            ctx_ = other.ctx_;
+            std::memset(&other.ctx_, 0, sizeof(cheap_ctx_3d));
+        }
+        return *this;
+    }
+
+    Context3D(const Context3D&) = delete;
+    Context3D& operator=(const Context3D&) = delete;
+
+    /* --- Core spectral primitives --- */
+
+    void forward(const double* input) { detail::check(try_forward(input)); }
+    int try_forward(const double* input) noexcept { return cheap_forward_3d(&ctx_, input); }
+
+    void forward_inplace() { detail::check(try_forward_inplace()); }
+    int try_forward_inplace() noexcept { return cheap_forward_inplace_3d(&ctx_); }
+
+    void inverse(double* output) { detail::check(try_inverse(output)); }
+    int try_inverse(double* output) noexcept { return cheap_inverse_3d(&ctx_, output); }
+
+    void inverse_inplace() { detail::check(try_inverse_inplace()); }
+    int try_inverse_inplace() noexcept { return cheap_inverse_inplace_3d(&ctx_); }
+
+    void apply(const double* input, const double* weights, double* output) {
+        detail::check(try_apply(input, weights, output));
+    }
+    int try_apply(const double* input, const double* weights, double* output) noexcept {
+        return cheap_apply_3d(&ctx_, input, weights, output);
+    }
+
+    std::vector<double> apply(const double* input, const double* weights) {
+        std::vector<double> out(static_cast<std::size_t>(ctx_.n));
+        apply(input, weights, out.data());
+        return out;
+    }
+
+    void apply_inplace(const double* weights) { detail::check(try_apply_inplace(weights)); }
+    int try_apply_inplace(const double* weights) noexcept {
+        return cheap_apply_inplace_3d(&ctx_, weights);
+    }
+
+    /* --- Span overloads (C++20) --- */
+
+#ifdef CHEAP_HAS_SPAN
+    void forward(std::span<const double> input) {
+        if (static_cast<int>(input.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        forward(input.data());
+    }
+
+    void inverse(std::span<double> output) {
+        if (static_cast<int>(output.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        inverse(output.data());
+    }
+
+    void apply(std::span<const double> input, std::span<const double> weights,
+               std::span<double> output) {
+        if (static_cast<int>(input.size()) != ctx_.n ||
+            static_cast<int>(weights.size()) != ctx_.n ||
+            static_cast<int>(output.size()) != ctx_.n)
+            throw Error(CHEAP_EINVAL);
+        apply(input.data(), weights.data(), output.data());
+    }
+
+    std::vector<double> apply(std::span<const double> input,
+                              std::span<const double> weights) {
+        if (static_cast<int>(input.size()) != ctx_.n ||
+            static_cast<int>(weights.size()) != ctx_.n)
+            throw Error(CHEAP_EINVAL);
+        return apply(input.data(), weights.data());
+    }
+
+    void apply_inplace(std::span<const double> weights) {
+        if (static_cast<int>(weights.size()) != ctx_.n) throw Error(CHEAP_EINVAL);
+        apply_inplace(weights.data());
+    }
+#endif
+
+    /* --- Accessors --- */
+
+    int nx() const noexcept { return ctx_.nx; }
+    int ny() const noexcept { return ctx_.ny; }
+    int nz() const noexcept { return ctx_.nz; }
+    int n() const noexcept { return ctx_.n; }
+    double Hx() const noexcept { return ctx_.current_Hx; }
+    double Hy() const noexcept { return ctx_.current_Hy; }
+    double Hz() const noexcept { return ctx_.current_Hz; }
+
+    const double* lambda() const noexcept { return ctx_.lambda; }
+    const double* sqrt_lambda() const noexcept { return ctx_.sqrt_lambda; }
+
+    double* workspace() noexcept { return ctx_.workspace; }
+    const double* workspace() const noexcept { return ctx_.workspace; }
+
+#ifdef CHEAP_HAS_SPAN
+    std::span<const double> lambda_span() const noexcept {
+        return {ctx_.lambda, static_cast<std::size_t>(ctx_.n)};
+    }
+    std::span<const double> sqrt_lambda_span() const noexcept {
+        return {ctx_.sqrt_lambda, static_cast<std::size_t>(ctx_.n)};
+    }
+    std::span<double> workspace_span() noexcept {
+        return {ctx_.workspace, static_cast<std::size_t>(ctx_.n)};
+    }
+    std::span<const double> workspace_span() const noexcept {
+        return {ctx_.workspace, static_cast<std::size_t>(ctx_.n)};
+    }
+#endif
+
+    cheap_ctx_3d* ctx() noexcept { return &ctx_; }
+    const cheap_ctx_3d* ctx() const noexcept { return &ctx_; }
+
+private:
+    cheap_ctx_3d ctx_{};
+};
+
+/* ============================================================
  * Spectral weight constructors (free functions)
  * ============================================================ */
 
@@ -465,6 +735,34 @@ inline std::vector<double> weights_rmt_shrink(const double* lambda, int n,
                                                 double sigma_sq, double c) {
     std::vector<double> w(static_cast<std::size_t>(n));
     detail::check(cheap_weights_rmt_shrink(lambda, n, sigma_sq, c, w.data()));
+    return w;
+}
+
+/* --- 2D / 3D weight constructors --- */
+
+inline std::vector<double> weights_laplacian_2d(int nx, int ny) {
+    std::vector<double> w(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny));
+    detail::check(cheap_weights_laplacian_2d(nx, ny, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_fractional_laplacian_2d(int nx, int ny, double alpha) {
+    std::vector<double> w(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny));
+    detail::check(cheap_weights_fractional_laplacian_2d(nx, ny, alpha, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_laplacian_3d(int nx, int ny, int nz) {
+    std::vector<double> w(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny) *
+                          static_cast<std::size_t>(nz));
+    detail::check(cheap_weights_laplacian_3d(nx, ny, nz, w.data()));
+    return w;
+}
+
+inline std::vector<double> weights_fractional_laplacian_3d(int nx, int ny, int nz, double alpha) {
+    std::vector<double> w(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny) *
+                          static_cast<std::size_t>(nz));
+    detail::check(cheap_weights_fractional_laplacian_3d(nx, ny, nz, alpha, w.data()));
     return w;
 }
 
