@@ -340,6 +340,156 @@ static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
 }
 
 /* ============================================================
+ * 2D context — cheap_ctx_2d
+ *
+ * A 2D stationary covariance with separable structure diagonalizes under
+ * the 2D DCT-II: lambda_{jk} = lambda_j^(x) * lambda_k^(y). We store the
+ * nx*ny eigenvalue grid in row-major flat layout (index = j*ny + k), so
+ * every pointwise kernel (cheap__mul_inplace, cheap__scale_copy, and every
+ * _ev-family weight ctor) is dimension-agnostic and works as-is.
+ *
+ * Monotonicity of the flat lambda array is NOT guaranteed for tensor-product
+ * spectra — CHEAP_DEBUG_CONTRACTS drops the strict-decreasing check here
+ * and keeps only the finite sweep.
+ * ============================================================ */
+
+typedef struct {
+    int nx, ny;
+    int n;                          /* nx * ny, for convenience */
+    int is_initialized;
+    double* restrict lambda;        /* flat row-major nx*ny eigenvalues */
+    double* restrict gibbs;         /* Sinkhorn Gibbs kernel (2D) */
+    double* restrict sqrt_lambda;
+    double* restrict workspace;     /* flat row-major nx*ny FFTW buffer */
+    double* restrict scratch1;
+    double* restrict scratch2;
+    double* restrict prev_g;
+    fftw_plan plan_fwd;             /* 2D DCT-II */
+    fftw_plan plan_inv;             /* 2D iDCT-III */
+    double current_eps;
+    double current_Hx;              /* Flandrin H along x; -1.0 if from_toeplitz */
+    double current_Hy;
+} cheap_ctx_2d;
+
+static inline void cheap_destroy_2d(cheap_ctx_2d* ctx)
+{
+    if (!ctx) return;
+    if (ctx->plan_fwd) { fftw_destroy_plan(ctx->plan_fwd); ctx->plan_fwd = NULL; }
+    if (ctx->plan_inv) { fftw_destroy_plan(ctx->plan_inv); ctx->plan_inv = NULL; }
+    if (ctx->lambda)      { fftw_free(ctx->lambda);      ctx->lambda = NULL; }
+    if (ctx->gibbs)       { fftw_free(ctx->gibbs);       ctx->gibbs = NULL; }
+    if (ctx->sqrt_lambda) { fftw_free(ctx->sqrt_lambda); ctx->sqrt_lambda = NULL; }
+    if (ctx->workspace)   { fftw_free(ctx->workspace);   ctx->workspace = NULL; }
+    if (ctx->scratch1)    { fftw_free(ctx->scratch1);    ctx->scratch1 = NULL; }
+    if (ctx->scratch2)    { fftw_free(ctx->scratch2);    ctx->scratch2 = NULL; }
+    if (ctx->prev_g)      { fftw_free(ctx->prev_g);      ctx->prev_g = NULL; }
+    ctx->is_initialized = 0;
+}
+
+/*
+ * cheap__alloc_ctx_2d — private helper: allocate flat nx*ny buffers and
+ * build 2D FFTW plans. Leaves lambda[] uninitialized.
+ */
+static inline int cheap__alloc_ctx_2d(cheap_ctx_2d* ctx, int nx, int ny)
+{
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->nx = nx;
+    ctx->ny = ny;
+    ctx->n  = nx * ny;
+    ctx->current_eps = -1.0;
+    ctx->current_Hx  = -1.0;
+    ctx->current_Hy  = -1.0;
+    const size_t bytes = (size_t)ctx->n * sizeof(double);
+    ctx->lambda      = (double*)fftw_malloc(bytes);
+    ctx->gibbs       = (double*)fftw_malloc(bytes);
+    ctx->sqrt_lambda = (double*)fftw_malloc(bytes);
+    ctx->workspace   = (double*)fftw_malloc(bytes);
+    ctx->scratch1    = (double*)fftw_malloc(bytes);
+    ctx->scratch2    = (double*)fftw_malloc(bytes);
+    ctx->prev_g      = (double*)fftw_malloc(bytes);
+    if (!ctx->lambda || !ctx->gibbs || !ctx->sqrt_lambda || !ctx->workspace ||
+        !ctx->scratch1 || !ctx->scratch2 || !ctx->prev_g) {
+        cheap_destroy_2d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    CHEAP_ASSERT_ALIGNED(ctx->lambda);
+    CHEAP_ASSERT_ALIGNED(ctx->gibbs);
+    CHEAP_ASSERT_ALIGNED(ctx->sqrt_lambda);
+    CHEAP_ASSERT_ALIGNED(ctx->workspace);
+    CHEAP_ASSERT_ALIGNED(ctx->scratch1);
+    CHEAP_ASSERT_ALIGNED(ctx->scratch2);
+    CHEAP_ASSERT_ALIGNED(ctx->prev_g);
+    const fftw_r2r_kind fwd[2] = { FFTW_REDFT10, FFTW_REDFT10 };
+    const fftw_r2r_kind inv[2] = { FFTW_REDFT01, FFTW_REDFT01 };
+    ctx->plan_fwd = fftw_plan_r2r_2d(nx, ny, ctx->workspace, ctx->workspace,
+                                      fwd[0], fwd[1], FFTW_PATIENT);
+    ctx->plan_inv = fftw_plan_r2r_2d(nx, ny, ctx->workspace, ctx->workspace,
+                                      inv[0], inv[1], FFTW_PATIENT);
+    if (!ctx->plan_fwd || !ctx->plan_inv) {
+        cheap_destroy_2d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    return CHEAP_OK;
+}
+
+/*
+ * cheap__flandrin_1d_axis — fill an n-length Flandrin eigenvalue vector
+ * using the same DC-extrapolation rule as cheap_init. Shared between
+ * cheap_init and cheap_init_2d/3d tensor-product spectra.
+ */
+static inline void cheap__flandrin_1d_axis(double* restrict lam, int n, double H)
+{
+    const double pow_n_2H    = pow((double)n, 2.0 * H);
+    const double twoH_plus_1 = 2.0 * H + 1.0;
+    for (int k = 1; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        if (s < CHEAP_EPS_LOG) s = CHEAP_EPS_LOG;
+        lam[k] = pow_n_2H * pow(s, -twoH_plus_1);
+    }
+    if (n >= 3)  lam[0] = lam[1] * (lam[1] / lam[2]);
+    else         lam[0] = 2.0 * lam[1];
+}
+
+/*
+ * cheap_init_2d — initialize a 2D context with a tensor-product Flandrin
+ * spectrum: lambda_{jk} = lambda_j^(x, Hx) * lambda_k^(y, Hy).
+ * nx, ny >= 2, Hx, Hy in (0, 1).
+ */
+static inline int cheap_init_2d(cheap_ctx_2d* ctx, int nx, int ny,
+                                 double Hx, double Hy)
+{
+    if (!ctx || nx < 2 || ny < 2 ||
+        Hx <= 0.0 || Hx >= 1.0 || Hy <= 0.0 || Hy >= 1.0) return CHEAP_EINVAL;
+    int rc = cheap__alloc_ctx_2d(ctx, nx, ny);
+    if (rc != CHEAP_OK) return rc;
+    ctx->current_Hx = Hx;
+    ctx->current_Hy = Hy;
+    double* lx = (double*)fftw_malloc((size_t)nx * sizeof(double));
+    double* ly = (double*)fftw_malloc((size_t)ny * sizeof(double));
+    if (!lx || !ly) {
+        if (lx) fftw_free(lx);
+        if (ly) fftw_free(ly);
+        cheap_destroy_2d(ctx);
+        return CHEAP_ENOMEM;
+    }
+    cheap__flandrin_1d_axis(lx, nx, Hx);
+    cheap__flandrin_1d_axis(ly, ny, Hy);
+    for (int j = 0; j < nx; ++j)
+        for (int k = 0; k < ny; ++k)
+            ctx->lambda[j * ny + k] = lx[j] * ly[k];
+    fftw_free(lx);
+    fftw_free(ly);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, ctx->n);
+    /* Monotonicity intentionally not checked: tensor-product spectra are
+     * not sorted in row-major flat order. Each axis is individually
+     * monotone, but the product grid is not. */
+    for (int k = 0; k < ctx->n; ++k)
+        ctx->sqrt_lambda[k] = sqrt(fmax(ctx->lambda[k], CHEAP_EPS_LAMBDA));
+    ctx->is_initialized = 1;
+    return CHEAP_OK;
+}
+
+/* ============================================================
  * Core spectral primitives: forward, inverse, apply
  * ============================================================ */
 
