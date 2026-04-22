@@ -250,6 +250,197 @@ static void test_init_from_toeplitz_2d_matches_flandrin(void)
     fftw_free(lx); fftw_free(ly); fftw_free(tx); fftw_free(ty);
 }
 
+/* ---------- Phase 1.3: forward / inverse / apply 2D ---------- */
+
+static double max_abs_diff(const double *a, const double *b, int n)
+{
+    double m = 0.0;
+    for (int i = 0; i < n; ++i) {
+        double d = fabs(a[i] - b[i]);
+        if (d > m) m = d;
+    }
+    return m;
+}
+
+typedef struct { int nx, ny; } size_pair;
+static const size_pair k_sizes_2d[] = {
+    {7, 5}, {16, 16}, {17, 64}, {63, 65}, {128, 256}
+};
+static const int k_num_sizes_2d = (int)(sizeof(k_sizes_2d) / sizeof(k_sizes_2d[0]));
+
+/* Fill an nx*ny buffer with reproducible "signal" values. */
+static void fill_signal(double *x, int nx, int ny, unsigned seed)
+{
+    for (int j = 0; j < nx; ++j) {
+        for (int k = 0; k < ny; ++k) {
+            double s = sin(0.01 * (seed + j * 17 + k * 31));
+            double c = cos(0.013 * (seed * 3 + j * 7 - k));
+            x[j * ny + k] = s + 0.5 * c;
+        }
+    }
+}
+
+static void test_apply_2d_identity(void)
+{
+    for (int s = 0; s < k_num_sizes_2d; ++s) {
+        const int nx = k_sizes_2d[s].nx;
+        const int ny = k_sizes_2d[s].ny;
+        const int n  = nx * ny;
+
+        cheap_ctx_2d ctx = {0};
+        ASSERT_EQ(cheap_init_2d(&ctx, nx, ny, 0.5, 0.5), CHEAP_OK);
+
+        double *x  = (double *)malloc((size_t)n * sizeof(double));
+        double *w  = (double *)malloc((size_t)n * sizeof(double));
+        double *y  = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal(x, nx, ny, 7u);
+        for (int i = 0; i < n; ++i) w[i] = 1.0;
+
+        ASSERT_EQ(cheap_apply_2d(&ctx, x, w, y), CHEAP_OK);
+        ASSERT_TRUE(max_abs_diff(x, y, n) < 1e-12);
+
+        cheap_destroy_2d(&ctx);
+        free(x); free(w); free(y);
+    }
+}
+
+static void test_forward_inverse_2d_roundtrip(void)
+{
+    for (int s = 0; s < k_num_sizes_2d; ++s) {
+        const int nx = k_sizes_2d[s].nx;
+        const int ny = k_sizes_2d[s].ny;
+        const int n  = nx * ny;
+
+        cheap_ctx_2d ctx = {0};
+        ASSERT_EQ(cheap_init_2d(&ctx, nx, ny, 0.4, 0.6), CHEAP_OK);
+
+        double *x = (double *)malloc((size_t)n * sizeof(double));
+        double *y = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal(x, nx, ny, 13u);
+
+        ASSERT_EQ(cheap_forward_2d(&ctx, x), CHEAP_OK);
+        ASSERT_EQ(cheap_inverse_2d(&ctx, y), CHEAP_OK);
+        ASSERT_TRUE(max_abs_diff(x, y, n) < 1e-12);
+
+        cheap_destroy_2d(&ctx);
+        free(x); free(y);
+    }
+}
+
+static void test_apply_inplace_2d_matches_apply(void)
+{
+    for (int s = 0; s < k_num_sizes_2d; ++s) {
+        const int nx = k_sizes_2d[s].nx;
+        const int ny = k_sizes_2d[s].ny;
+        const int n  = nx * ny;
+
+        cheap_ctx_2d ctx = {0};
+        ASSERT_EQ(cheap_init_2d(&ctx, nx, ny, 0.3, 0.7), CHEAP_OK);
+
+        double *x  = (double *)malloc((size_t)n * sizeof(double));
+        double *w  = (double *)malloc((size_t)n * sizeof(double));
+        double *y1 = (double *)malloc((size_t)n * sizeof(double));
+        double *y2 = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal(x, nx, ny, 29u);
+        /* Use ctx->lambda as a non-trivial weight vector. */
+        for (int i = 0; i < n; ++i) w[i] = 1.0 / (ctx.lambda[i] + 1.0);
+
+        ASSERT_EQ(cheap_apply_2d(&ctx, x, w, y1), CHEAP_OK);
+
+        memcpy(cheap_workspace_2d(&ctx), x, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_apply_inplace_2d(&ctx, w), CHEAP_OK);
+        memcpy(y2, cheap_workspace_2d(&ctx), (size_t)n * sizeof(double));
+
+        ASSERT_TRUE(max_abs_diff(y1, y2, n) < 1e-12);
+
+        cheap_destroy_2d(&ctx);
+        free(x); free(w); free(y1); free(y2);
+    }
+}
+
+static void test_forward_inverse_inplace_2d_equivalence(void)
+{
+    for (int s = 0; s < k_num_sizes_2d; ++s) {
+        const int nx = k_sizes_2d[s].nx;
+        const int ny = k_sizes_2d[s].ny;
+        const int n  = nx * ny;
+
+        cheap_ctx_2d ctx = {0};
+        ASSERT_EQ(cheap_init_2d(&ctx, nx, ny, 0.5, 0.5), CHEAP_OK);
+
+        double *x  = (double *)malloc((size_t)n * sizeof(double));
+        double *yf = (double *)malloc((size_t)n * sizeof(double));
+        double *yi = (double *)malloc((size_t)n * sizeof(double));
+        fill_signal(x, nx, ny, 41u);
+
+        /* Forward equivalence. */
+        ASSERT_EQ(cheap_forward_2d(&ctx, x), CHEAP_OK);
+        memcpy(yf, cheap_workspace_2d(&ctx), (size_t)n * sizeof(double));
+
+        memcpy(cheap_workspace_2d(&ctx), x, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_forward_inplace_2d(&ctx), CHEAP_OK);
+        memcpy(yi, cheap_workspace_2d(&ctx), (size_t)n * sizeof(double));
+        ASSERT_TRUE(max_abs_diff(yf, yi, n) < 1e-12);
+
+        /* Inverse equivalence: from the same spectral state in the
+         * workspace, cheap_inverse_2d and cheap_inverse_inplace_2d
+         * must produce the same signal. */
+        memcpy(cheap_workspace_2d(&ctx), yf, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_inverse_2d(&ctx, yi), CHEAP_OK);
+
+        memcpy(cheap_workspace_2d(&ctx), yf, (size_t)n * sizeof(double));
+        ASSERT_EQ(cheap_inverse_inplace_2d(&ctx), CHEAP_OK);
+        ASSERT_TRUE(max_abs_diff(yi, cheap_workspace_2d(&ctx), n) < 1e-12);
+
+        cheap_destroy_2d(&ctx);
+        free(x); free(yf); free(yi);
+    }
+}
+
+static void test_apply_2d_bad_args(void)
+{
+    const int nx = 16, ny = 16, n = nx * ny;
+    cheap_ctx_2d ctx = {0};
+    ASSERT_EQ(cheap_init_2d(&ctx, nx, ny, 0.5, 0.5), CHEAP_OK);
+
+    double *x = (double *)malloc((size_t)n * sizeof(double));
+    double *w = (double *)malloc((size_t)n * sizeof(double));
+    double *y = (double *)malloc((size_t)n * sizeof(double));
+    fill_signal(x, nx, ny, 3u);
+    for (int i = 0; i < n; ++i) w[i] = 1.0;
+
+    /* EUNINIT: NULL ctx / uninitialized ctx */
+    ASSERT_EQ(cheap_apply_2d(NULL, x, w, y), CHEAP_EUNINIT);
+    cheap_ctx_2d zero = {0};
+    ASSERT_EQ(cheap_apply_2d(&zero, x, w, y), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_forward_2d(&zero, x), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_inverse_2d(&zero, y), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_apply_inplace_2d(&zero, w), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_forward_inplace_2d(&zero), CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_inverse_inplace_2d(&zero), CHEAP_EUNINIT);
+
+    /* EINVAL: NULL buffers */
+    ASSERT_EQ(cheap_apply_2d(&ctx, NULL, w, y), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_apply_2d(&ctx, x, NULL, y), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_apply_2d(&ctx, x, w, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_apply_inplace_2d(&ctx, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_forward_2d(&ctx, NULL), CHEAP_EINVAL);
+    ASSERT_EQ(cheap_inverse_2d(&ctx, NULL), CHEAP_EINVAL);
+
+    /* EDOM: non-finite input to the finiteness-checked variants */
+    x[5] = (double)NAN;
+    ASSERT_EQ(cheap_apply_2d(&ctx, x, w, y), CHEAP_EDOM);
+    ASSERT_EQ(cheap_forward_2d(&ctx, x), CHEAP_EDOM);
+
+    /* workspace accessor round-trips */
+    ASSERT_TRUE(cheap_workspace_2d(NULL) == NULL);
+    ASSERT_TRUE(cheap_workspace_2d(&zero) == NULL);
+    ASSERT_TRUE(cheap_workspace_2d(&ctx) == ctx.workspace);
+
+    cheap_destroy_2d(&ctx);
+    free(x); free(w); free(y);
+}
+
 static void test_init_from_toeplitz_2d_bad_args(void)
 {
     const int nx = 8, ny = 6;
@@ -278,6 +469,11 @@ int main(void)
     test_init_from_eigenvalues_2d();              printf("  test_init_from_eigenvalues_2d\n");
     test_init_from_toeplitz_2d_matches_flandrin();printf("  test_init_from_toeplitz_2d_matches_flandrin\n");
     test_init_from_toeplitz_2d_bad_args();        printf("  test_init_from_toeplitz_2d_bad_args\n");
+    test_apply_2d_identity();                     printf("  test_apply_2d_identity\n");
+    test_forward_inverse_2d_roundtrip();          printf("  test_forward_inverse_2d_roundtrip\n");
+    test_apply_inplace_2d_matches_apply();        printf("  test_apply_inplace_2d_matches_apply\n");
+    test_forward_inverse_inplace_2d_equivalence();printf("  test_forward_inverse_inplace_2d_equivalence\n");
+    test_apply_2d_bad_args();                     printf("  test_apply_2d_bad_args\n");
 
     printf("\n=== %d tests run, %d failed ===\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;

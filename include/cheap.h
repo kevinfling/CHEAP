@@ -753,6 +753,125 @@ static inline int cheap_apply_inplace(cheap_ctx* restrict ctx,
 }
 
 /* ============================================================
+ * 2D spectral primitives: forward, inverse, apply
+ *
+ * Operate on the flat row-major nx*ny workspace of cheap_ctx_2d.
+ * Normalization is 1/(4*nx*ny) — each DCT axis contributes a
+ * factor of 2N_axis under the FFTW REDFT10/REDFT01 convention.
+ * ============================================================ */
+
+/*
+ * cheap_forward_2d — 2D DCT-II of input into ctx->workspace.
+ */
+static inline int cheap_forward_2d(cheap_ctx_2d* restrict ctx,
+                                     const double* restrict input)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!input) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
+    memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
+    fftw_execute(ctx->plan_fwd);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_forward_inplace_2d — 2D DCT-II of ctx->workspace in place.
+ * Caller must populate workspace beforehand (e.g. via cheap_workspace_2d).
+ */
+static inline int cheap_forward_inplace_2d(cheap_ctx_2d* restrict ctx)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    fftw_execute(ctx->plan_fwd);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_inverse_2d — 2D iDCT-III of ctx->workspace into output,
+ * with 1/(4*nx*ny) normalization.
+ */
+static inline int cheap_inverse_2d(cheap_ctx_2d* restrict ctx,
+                                     double* restrict output)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!output) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (4.0 * (double)ctx->nx * (double)ctx->ny);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(output, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_inverse_inplace_2d — iDCT-III of ctx->workspace in place
+ * with 1/(4*nx*ny) normalization.
+ */
+static inline int cheap_inverse_inplace_2d(cheap_ctx_2d* restrict ctx)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    const int n = ctx->n;
+    const double norm = 1.0 / (4.0 * (double)ctx->nx * (double)ctx->ny);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(ctx->workspace, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_apply_2d — 2D universal spectral operation:
+ *   output = iDCT2( DCT2(input) ⊙ weights ) / (4*nx*ny)
+ *
+ * weights is a flat nx*ny array in row-major order matching
+ * ctx->lambda. Reuses the SIMD-accelerated cheap__mul_inplace and
+ * cheap__scale_copy helpers on the flat workspace.
+ */
+static inline int cheap_apply_2d(cheap_ctx_2d* restrict ctx,
+                                   const double* restrict input,
+                                   const double* restrict weights,
+                                   double* restrict output)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!input || !weights || !output) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (4.0 * (double)ctx->nx * (double)ctx->ny);
+    for (int i = 0; i < n; ++i) if (!isfinite(input[i])) return CHEAP_EDOM;
+    memcpy(ctx->workspace, input, (size_t)n * sizeof(double));
+    fftw_execute(ctx->plan_fwd);
+    cheap__mul_inplace(ctx->workspace, weights, n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(output, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_apply_inplace_2d — in-place twin of cheap_apply_2d.
+ * Operates entirely on ctx->workspace: caller populates it first
+ * (e.g. via cheap_workspace_2d), then reads the result from the
+ * same buffer. Skips the input memcpy and isfinite sweep.
+ */
+static inline int cheap_apply_inplace_2d(cheap_ctx_2d* restrict ctx,
+                                           const double* restrict weights)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!weights) return CHEAP_EINVAL;
+    const int n = ctx->n;
+    const double norm = 1.0 / (4.0 * (double)ctx->nx * (double)ctx->ny);
+    fftw_execute(ctx->plan_fwd);
+    cheap__mul_inplace(ctx->workspace, weights, n);
+    fftw_execute(ctx->plan_inv);
+    cheap__scale_copy(ctx->workspace, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_workspace_2d — accessor to the flat nx*ny workspace buffer.
+ * Mirrors cheap_workspace for the 2D context.
+ */
+static inline double* cheap_workspace_2d(cheap_ctx_2d* ctx)
+{
+    return (ctx && ctx->is_initialized) ? ctx->workspace : NULL;
+}
+
+/* ============================================================
  * Sinkhorn optimal transport (max-log stabilized)
  * ============================================================ */
 
