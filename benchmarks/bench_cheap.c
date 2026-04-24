@@ -681,6 +681,107 @@ static void run_weight_benchmarks_3d(int nx, int ny, int nz)
 }
 
 /* =========================================================================
+ * v0.3.0 weight constructor benchmarks (1D flat)
+ * =========================================================================
+ * Measured on ARMv8 rev 1 @ ~1.5 GHz, NEON, -O3 -march=native.
+ * The 'cyc/el' column in output is cntvct_el0 timer ticks/el (~31.25 MHz
+ * virtual timer), NOT CPU cycles. Multiply by ~48 to get CPU cycles at 1.5 GHz.
+ * Regression baseline at N=65,536 (wall ms):
+ *   matern_ev (nu=2.5): ~1.81 ms   (pow dominates, scalar)
+ *   heat_ev   (t=0.1):  ~0.55 ms   (exp dominates, scalar)
+ *   biharmonic_ev:      ~0.28 ms   (NEON vectorized — if > 0.40 ms check SIMD)
+ *   poisson_ev:         ~0.27 ms   (NEON vectorized)
+ * ========================================================================= */
+
+typedef struct { int n; double* mu; double* w; } wt30_state;
+
+static void bench_wt30_matern(void *p) {
+    wt30_state *s = (wt30_state *)p;
+    cheap_weights_matern_ev(s->n, s->mu, 1.0, 2.5, s->w);
+}
+static void bench_wt30_heat(void *p) {
+    wt30_state *s = (wt30_state *)p;
+    cheap_weights_heat_propagator_ev(s->n, s->mu, 0.1, s->w);
+}
+static void bench_wt30_biharmonic(void *p) {
+    wt30_state *s = (wt30_state *)p;
+    cheap_weights_biharmonic_ev(s->n, s->mu, 1e-4, s->w);
+}
+static void bench_wt30_poisson(void *p) {
+    wt30_state *s = (wt30_state *)p;
+    cheap_weights_poisson_ev(s->n, s->mu, 1e-8, s->w);
+}
+static void bench_wt30_hot_deconv(void *p) {
+    wt30_state *s = (wt30_state *)p;
+    /* psf = mu (reuse as dummy PSF), lap = NULL (computed inline) */
+    cheap_weights_higher_order_tikhonov_deconv_ev(s->n, s->mu, NULL, 0.01, 2.0, 1e-8, s->w);
+}
+
+static void run_wt30_benchmarks(int n)
+{
+    wt30_state *s = (wt30_state *)malloc(sizeof(*s));
+    s->n  = n;
+    s->mu = (double *)fftw_malloc((size_t)n * sizeof(double));
+    s->w  = (double *)fftw_malloc((size_t)n * sizeof(double));
+    cheap_weights_laplacian_ev(n, s->mu);
+
+    bench_stats st;
+
+    run_bench(bench_wt30_matern,     s, n, &st);
+    print_result("wt30_matern_ev",     n, &st);
+
+    run_bench(bench_wt30_heat,       s, n, &st);
+    print_result("wt30_heat_ev",       n, &st);
+
+    run_bench(bench_wt30_biharmonic, s, n, &st);
+    print_result("wt30_biharmonic_ev", n, &st);
+
+    run_bench(bench_wt30_poisson,    s, n, &st);
+    print_result("wt30_poisson_ev",    n, &st);
+
+    run_bench(bench_wt30_hot_deconv, s, n, &st);
+    print_result("wt30_hot_deconv_ev", n, &st);
+
+    fftw_free(s->mu); fftw_free(s->w); free(s);
+}
+
+/* v0.3.0 2D weight benchmarks */
+typedef struct { int nx, ny; double* w; } wt30_2d_state;
+
+static void bench_wt30_matern_2d(void *p) {
+    wt30_2d_state *s = (wt30_2d_state *)p;
+    cheap_weights_matern_2d(s->nx, s->ny, 1.0, 2.5, s->w);
+}
+static void bench_wt30_biharmonic_2d(void *p) {
+    wt30_2d_state *s = (wt30_2d_state *)p;
+    cheap_weights_biharmonic_2d(s->nx, s->ny, 1e-4, s->w);
+}
+static void bench_wt30_poisson_2d(void *p) {
+    wt30_2d_state *s = (wt30_2d_state *)p;
+    cheap_weights_poisson_2d(s->nx, s->ny, 1e-8, s->w);
+}
+
+static void run_wt30_benchmarks_2d(int nx, int ny)
+{
+    wt30_2d_state *s = (wt30_2d_state *)malloc(sizeof(*s));
+    s->nx = nx; s->ny = ny;
+    s->w  = (double *)fftw_malloc((size_t)(nx * ny) * sizeof(double));
+
+    bench_stats st;
+
+    run_bench(bench_wt30_matern_2d,     s, nx * ny, &st);
+    print_result("wt30_matern_2d",       nx * ny, &st);
+
+    run_bench(bench_wt30_biharmonic_2d, s, nx * ny, &st);
+    print_result("wt30_biharmonic_2d",   nx * ny, &st);
+
+    run_bench(bench_wt30_poisson_2d,    s, nx * ny, &st);
+    print_result("wt30_poisson_2d",      nx * ny, &st);
+
+    fftw_free(s->w); free(s);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 int main(void)
@@ -723,9 +824,16 @@ int main(void)
             run_core_benchmarks_3d(sizes_3d[i][0], sizes_3d[i][1], sizes_3d[i][2]);
     }
 
-    /* 2D / 3D weight constructors */
+    /* 2D / 3D weight constructors (v0.2.0) */
     run_weight_benchmarks_2d(128, 128);
     run_weight_benchmarks_3d(32, 32, 32);
+
+    /* v0.3.0 weight constructors (1D flat) */
+    for (int i = 0; i < nsizes; ++i)
+        run_wt30_benchmarks(sizes[i]);
+
+    /* v0.3.0 weight constructors (2D) */
+    run_wt30_benchmarks_2d(128, 128);
 
     return 0;
 }

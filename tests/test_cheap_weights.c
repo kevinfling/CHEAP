@@ -658,6 +658,79 @@ static void test_weights_higher_order_tikhonov_deconv_ev(void)
 }
 
 /* =========================================================================
+ * cheap_sample_matern_2d / cheap_sample_matern_3d
+ * ========================================================================= */
+static void test_sample_matern_2d(void)
+{
+    printf("  test_sample_matern_2d\n");
+
+    const int NX = 16, NY = 16, N = NX * NY;
+    cheap_ctx_2d ctx;
+    ASSERT_EQ(cheap_init_2d(&ctx, NX, NY, 0.7, 0.7), CHEAP_OK);
+
+    /* Simple non-constant input: alternating ±1 */
+    double noise[16 * 16], grf[16 * 16];
+    for (int i = 0; i < N; ++i) noise[i] = (i % 2 == 0) ? 1.0 : -1.0;
+
+    ASSERT_EQ(cheap_sample_matern_2d(&ctx, noise, 1.0, 1.5, grf), CHEAP_OK);
+    ASSERT_TRUE(all_finite(grf, N));
+
+    /* Result must differ from input (the filter is non-trivial) */
+    int differs = 0;
+    for (int i = 0; i < N; ++i)
+        if (fabs(grf[i] - noise[i]) > 1e-10) { differs = 1; break; }
+    ASSERT_TRUE(differs);
+
+    /* Cross-check: cheap_sample_matern_2d == cheap_apply_2d with Matérn weights */
+    {
+        double w[16 * 16], ref[16 * 16];
+        cheap_weights_matern_2d(NX, NY, 1.0, 1.5, w);
+        cheap_apply_2d(&ctx, noise, w, ref);
+        for (int i = 0; i < N; ++i)
+            ASSERT_NEAR(grf[i], ref[i], 1e-13);
+    }
+
+    /* Error codes */
+    ASSERT_EQ(cheap_sample_matern_2d(NULL, noise, 1.0, 1.5, grf),    CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_sample_matern_2d(&ctx, NULL, 1.0, 1.5, grf),     CHEAP_EINVAL);
+    ASSERT_EQ(cheap_sample_matern_2d(&ctx, noise, 0.0, 1.5, grf),    CHEAP_EINVAL);
+    ASSERT_EQ(cheap_sample_matern_2d(&ctx, noise, 1.0, 0.0, grf),    CHEAP_EINVAL);
+    ASSERT_EQ(cheap_sample_matern_2d(&ctx, noise, 1.0, 1.5, NULL),   CHEAP_EINVAL);
+
+    cheap_destroy_2d(&ctx);
+}
+
+static void test_sample_matern_3d(void)
+{
+    printf("  test_sample_matern_3d\n");
+
+    const int NX = 8, NY = 8, NZ = 8, N = NX * NY * NZ;
+    cheap_ctx_3d ctx;
+    ASSERT_EQ(cheap_init_3d(&ctx, NX, NY, NZ, 0.7, 0.7, 0.7), CHEAP_OK);
+
+    double noise[8 * 8 * 8], grf[8 * 8 * 8];
+    for (int i = 0; i < N; ++i) noise[i] = (i % 2 == 0) ? 1.0 : -1.0;
+
+    ASSERT_EQ(cheap_sample_matern_3d(&ctx, noise, 1.0, 2.5, grf), CHEAP_OK);
+    ASSERT_TRUE(all_finite(grf, N));
+
+    /* Cross-check vs cheap_apply_3d */
+    {
+        double w[8 * 8 * 8], ref[8 * 8 * 8];
+        cheap_weights_matern_3d(NX, NY, NZ, 1.0, 2.5, w);
+        cheap_apply_3d(&ctx, noise, w, ref);
+        for (int i = 0; i < N; ++i)
+            ASSERT_NEAR(grf[i], ref[i], 1e-13);
+    }
+
+    ASSERT_EQ(cheap_sample_matern_3d(NULL, noise, 1.0, 2.5, grf),  CHEAP_EUNINIT);
+    ASSERT_EQ(cheap_sample_matern_3d(&ctx, NULL, 1.0, 2.5, grf),   CHEAP_EINVAL);
+    ASSERT_EQ(cheap_sample_matern_3d(&ctx, noise, 0.0, 2.5, grf),  CHEAP_EINVAL);
+
+    cheap_destroy_3d(&ctx);
+}
+
+/* =========================================================================
  * main
  * ========================================================================= */
 int main(void)
@@ -678,6 +751,8 @@ int main(void)
     test_weights_poisson_2d();
     test_weights_poisson_3d();
     test_weights_higher_order_tikhonov_deconv_ev();
+    test_sample_matern_2d();
+    test_sample_matern_3d();
 
     printf("\n%d tests run, %d failed\n", g_tests_run, g_tests_failed);
     return (g_tests_failed == 0) ? 0 : 1;

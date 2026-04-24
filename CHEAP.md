@@ -67,6 +67,12 @@ where **w** is a weight vector chosen according to the specific problem. By sele
 | RMT Hard Threshold | w_k = λ_k · 𝟙(λ_k > λ₊) | User-provided |
 | RMT Optimal Shrinkage | Donoho–Gavish (see §3.5.5) | User-provided |
 | Wiener Deconvolution | w_k = λ_psf,k / (λ_psf,k² + η) | User-provided (PSF) |
+| Matérn GRF Covariance | w_k = (κ² + μ_k)^(-ν) | Laplacian |
+| Anisotropic Matérn | w_k = (κ_x²·lx_k + κ_y²·ly_k + ε)^(-ν) | Laplacian (per-axis) |
+| Heat Propagator | w_k = exp(−t · μ_k) | Laplacian |
+| Biharmonic Inverse | w_k = 1 / (μ_k² + ε) | Laplacian |
+| Poisson Inverse | w_0 = 0; w_k = 1 / (μ_k + ε), k ≥ 1 | Laplacian |
+| Higher-Order Tikhonov Deconv | w_k = ψ_k / (ψ_k² + α·μ_k^p + ε) | Laplacian + User PSF |
 
 Here we distinguish two eigenvalue families that arise naturally in the framework: the *Flandrin eigenvalues* λ_k of the dfBm covariance (§2.2), and the *Laplacian eigenvalues* μ_k = 4 sin²(πk/2n) of the discrete Neumann Laplacian (§3.5.1). Some weights are purely index-based and require no precomputed eigenvalues. Others accept user-provided eigenvalues from empirical data. This distinction is important: confusing the two families produces mathematically well-defined but physically meaningless results.
 
@@ -250,36 +256,53 @@ This is the spectral representation of the heat kernel e^(tΔ) under Neumann bou
 
 ### 3.6.3 Biharmonic Inverse Weights
 
-    w[k] = 1 / (μ[k]² + ε)
+    w[k] = 1 / (μ_k² + ε),   k = 0, …, n−1
 
-The biharmonic operator Δ² has eigenvalues μ_k² under the Laplacian basis. Inverting it spectrally recovers the solution to Δ²u = f (e.g., thin-plate spline interpolation, Euler–Bernoulli beam deflection, 2D Stokes flow stream function). The regularization ε > 0 is necessary because μ[0] = 0 makes the unregularized biharmonic singular at DC. With ε > 0 the DC weight is 1/ε — a finite constant that penalizes the mean level equally for all ε.
+The biharmonic operator Δ² is the composition of the Laplacian with itself. Under the Neumann-BC DCT-II basis, the Laplacian has eigenvalues μ_k = 4 sin²(πk/2n), so Δ² has eigenvalues μ_k². The spectral inverse is therefore 1/μ_k², regularized at DC (μ_0 = 0) by ε > 0.
 
-The `biharmonic_ev` function and the second pass of `biharmonic_2d/3d` are vectorized (AVX2: 4×f64, NEON: 2×f64) because the formula involves only multiplication, addition, and division.
+**Derivation.** The thin-plate energy functional E[u] = ∫ ‖Δu‖² minimized subject to interpolation constraints is solved by the Green's function of Δ², known as the thin-plate spline. In the spectral domain the solution operator is diag(1/μ_k²), confirming the weight formula. The same operator appears in the Euler–Bernoulli beam equation EI·∂⁴u/∂x⁴ = f (one-dimensional biharmonic) and in the 2D Stokes stream-function equation Δ²ψ = ω.
+
+**DC handling.** The unregularized weight 1/μ_0² = ∞ corresponds to the fact that the biharmonic equation Δ²u = f has a two-dimensional null space spanned by {1, x} in 1D (the affine functions). Adding ε > 0 gives DC weight 1/ε — a large but finite regularization that penalizes departures from zero mean equally at all frequencies. Users requiring exact null-space enforcement should zero w[0] (and w[1] if an affine null space is present) after the call.
+
+**Monotonicity.** The weights 1/(μ_k² + ε) are monotone decreasing in k for k ≥ 1 since μ_k is strictly increasing for k ≥ 1 (Laplacian eigenvalues are increasing by §3.5.1). High-frequency modes are more strongly penalized, consistent with the smoothness-promoting character of biharmonic regularization.
+
+**SIMD.** `cheap_weights_biharmonic_ev` and the second pass of `cheap_weights_biharmonic_2d/3d` are vectorized (AVX2: 4×f64, NEON: 2×f64) because the hot path involves only multiplication, addition, and reciprocal — no transcendental functions.
+
+**Honest limitations.** Biharmonic regularization imposes fourth-order smoothness, which may over-smooth piecewise-smooth signals (e.g. images with sharp edges). In such cases a first-order Tikhonov penalty (Poisson inverse, §3.6.4, or HOT deconvolution, §3.6.5 with p=1) is preferable.
 
 ### 3.6.4 Poisson Inverse Weights
 
-    w[0] = 0,   w[k] = 1 / (μ[k] + ε)   for k ≥ 1
+    w[0] = 0,   w[k] = 1 / (μ_k + ε),   k = 1, …, n−1
 
-This inverts the negative Laplacian -Δ on the mean-free subspace, solving the Poisson equation -Δu = f when f has zero mean. The DC projection (w[0] = 0) enforces the solvability condition: the Poisson equation has no solution when f has nonzero mean (the Laplacian has a zero eigenvalue). Setting w[0] = 0 projects out the null space, selecting the solution with zero mean.
+**Mathematical background.** The Poisson equation −Δu = f on a bounded domain with Neumann boundary conditions has a solution if and only if f has zero mean (the Fredholm alternative: the Laplacian has a zero eigenvalue, so the right-hand side must be orthogonal to the null space). When this solvability condition holds, the solution is unique up to an additive constant, conventionally fixed by requiring zero mean. In the CHEAP spectral framework, the solution operator is diag(1/μ_k) applied to the DCT coefficients of f, with the DC coefficient set to zero to select the zero-mean solution.
 
-**Comparison to spectral normalization.** `cheap_weights_specnorm_ev` weights by 1/√(μ+ε) (whitening: equalizes all spectral components to unit variance). The Poisson weight 1/(μ+ε) is the exact spectral inverse of the Laplacian, not a normalization. For ε → 0, the Poisson weight diverges at low frequencies (large correlation length), which is physically correct: the Green's function of -Δ in free space is the harmonic potential.
+**Derivation.** Writing the Poisson equation in the DCT basis: −μ_k û_k = f̂_k for all k, so û_k = −f̂_k/μ_k for k ≥ 1 and û_0 = 0 (by convention). Taking w_k = 1/μ_k (ignoring sign — the sign of Δ is absorbed by convention in the application) and w_0 = 0 gives the stated formula. The regularization ε ≥ 0 adds Tikhonov damping to all modes: at ε > 0 the filter is bounded by ‖w‖_∞ = 1/(μ_1 + ε) ≤ 1/ε, preventing blow-up even when the input is not strictly mean-free.
 
-The SIMD implementation skips the DC bin (starts at k = 1) to preserve the exact zero; the unaligned load at k = 1 is handled by the `loadu` variants throughout.
+**Relationship to the Green's function.** The continuum Green's function of −Δ on ℝ^d is the harmonic potential: G(x) = log ‖x‖ in 2D, G(x) = −1/(4π‖x‖) in 3D. On a finite grid, the spectral inverse 1/μ_k is the discrete analogue, with ε playing the role of a screening constant (Yukawa / screened Laplacian). At ε → 0, low-frequency modes receive weight → ∞, reflecting the long-range nature of the harmonic potential. Contrast with the Wiener filter (§3.5.2), which is bounded in [0, 1), and spectral normalization (§3.5.3), which weights by 1/√(μ_k + ε) — neither inverts the Laplacian exactly.
+
+**DC projection.** The DC weight w_0 = 0 is hardcoded (not computed as 1/(0 + ε)). This is an exact projection onto the mean-free subspace, not an approximation. The SIMD loop starts at k = 1 using unaligned loads (`loadu`) to preserve this invariant without branching.
+
+**Honest limitations.** The discrete Poisson solve via DCT-II assumes Neumann (zero-flux) boundary conditions, not periodic or Dirichlet. For periodic domains, the DFT should be used instead. For Dirichlet conditions, the DST (discrete sine transform) diagonalizes the Laplacian and requires a different basis.
 
 ### 3.6.5 Higher-Order Tikhonov Deconvolution Weights
 
-    w[k] = ψ[k] / (ψ[k]² + α·μ[k]^p + ε)
+    w[k] = ψ_k / (ψ_k² + α·μ_k^p + ε),   k = 0, …, n−1
 
-where ψ[k] are PSF eigenvalues (as in §3.5.7) and μ[k] are Laplacian eigenvalues. The penalty term α·μ[k]^p generalizes the flat noise floor of Wiener deconvolution (§3.5.7):
+where ψ_k are PSF eigenvalues (DCT-II spectrum of the PSF first column, as in §3.5.7) and μ_k are Laplacian eigenvalues.
 
-- p = 0: flat penalty, reduces to Wiener deconvolution with noise power α + ε.
-- p = 1: gradient (Tikhonov) penalty — penalizes roughness linearly.
-- p = 2: biharmonic penalty — penalizes roughness quadratically, giving smoother solutions.
-- p > 2: super-biharmonic penalty, strongly suppresses high-frequency artifacts.
+**Derivation.** The deconvolution problem y = Hx + n (H is the PSF operator, n is noise) has MAP estimate under a Gaussian signal prior with precision (−Δ)^(p/2) — i.e. the signal is penalized for having large Sobolev H^(p/2) norm. The MAP objective is ‖y − Hx‖² + α‖(−Δ)^(p/2) x‖². In the CHEAP spectral basis, H is diag(ψ_k) and (−Δ)^(p/2) is diag(μ_k^(p/2)), so the objective becomes ∑_k [ (ŷ_k − ψ_k x̂_k)² + α μ_k^p x̂_k² ]. Setting the derivative to zero gives x̂_k = ψ_k ŷ_k / (ψ_k² + α μ_k^p), matching the stated formula (with ε as a numerical floor).
 
-At DC: μ[0] = 0 so pow(0, p) = 0 for any p > 0 (guaranteed by C99), leaving w[0] = ψ[0]/(ψ[0]² + ε). If ψ[0] = 0 and ε = 0 the denominator vanishes; the implementation guards this with a `fmax(den, CHEAP_EPS_DIV)` floor.
+**Special cases and comparison to §3.5.7.**
+- p = 0, α = η: reduces to Wiener deconvolution (§3.5.7) with flat noise floor η. The HOT formula collapses to ψ_k/(ψ_k² + α + ε).
+- p = 1: Tikhonov regularization with gradient-norm penalty. The Sobolev H^(1/2) prior; weights taper more gently at high k than p = 2.
+- p = 2: biharmonic penalty. The Sobolev H¹ prior (finite energy); weights suppress high frequencies quadratically faster than p = 1.
+- p > 2: super-Sobolev priors, appropriate for very smooth signals (analytic functions). Large p concentrates support on the lowest-k modes.
 
-When `lap_eigenvalues == NULL` the function computes a 1D Laplacian spectrum internally via `malloc`. For 2D/3D problems the caller should pass the appropriate flat 2D/3D Laplacian grid (from `cheap_weights_laplacian_2d/3d`) explicitly.
+**DC analysis.** At k = 0: μ_0 = 0, so α·μ_0^p = 0 (by C99 `pow(0, p) = 0` for p > 0). The DC weight is w_0 = ψ_0/(ψ_0² + ε), which inverts the PSF at DC with no roughness penalty — physically correct, since the DC component has zero spatial frequency and is not penalized by any Sobolev norm. If ψ_0 = 0 and ε = 0, the denominator vanishes; the implementation floors the denominator at CHEAP_EPS_DIV (1e-300).
+
+**Zero-allocation NULL path.** When `lap_eigenvalues == NULL`, the 1D Laplacian value 4 sin²(πk/2n) is computed on-the-fly per element inside the loop — no heap allocation, no ENOMEM failure path. For 2D/3D problems pass the flat Laplacian grid from `cheap_weights_laplacian_2d/3d` explicitly, since the on-the-fly formula only generates the 1D spectrum.
+
+**Honest limitations.** The Sobolev prior is isotropic: it penalizes roughness equally in all directions. For images with directional textures or anisotropic PSFs, an anisotropic penalty (e.g. using `cheap_weights_anisotropic_matern_2d` to build the regularization eigenvalues) may produce better results. The non-integer-p case requires `pow(mu, p)` which is transcendental; for integer p, consider explicit products of μ_k for speed.
 
 **Reference [18]:** F. Lindgren, H. Rue, J. Lindström, "An explicit link between Gaussian fields and Gaussian Markov random fields: the stochastic partial differential equation approach," *Journal of the Royal Statistical Society: Series B*, 73(4):423–498, 2011.
 

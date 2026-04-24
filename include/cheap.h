@@ -2973,6 +2973,10 @@ static inline int cheap_weights_poisson_3d(int nx, int ny, int nz,
  * DC (μ[0]=0, pow(0,p)=0 by C99): w[0] = ψ[0]/(ψ[0]²+ε). The fmax
  * floor CHEAP_EPS_DIV guards against ψ[0]=0 with ε=0.
  *
+ * When lap_eigenvalues == NULL the 1D Laplacian is computed on-the-fly
+ * per element — zero allocation, zero-copy path. For 2D/3D problems pass
+ * the flat Laplacian grid from cheap_weights_laplacian_2d/3d explicitly.
+ *
  * Works with both Flandrin and Laplacian bases for lap_eigenvalues.
  * Scalar-only (pow in hot path).
  *
@@ -2980,7 +2984,7 @@ static inline int cheap_weights_poisson_3d(int nx, int ny, int nz,
  *   double psf_eig[N], w[N];
  *   cheap_toeplitz_eigenvalues(&ctx, psf_col, psf_eig);
  *   cheap_weights_higher_order_tikhonov_deconv_ev(
- *       N, psf_eig, NULL, 0.01, 2.0, 1e-8, w);  // biharmonic penalty
+ *       N, psf_eig, NULL, 0.01, 2.0, 1e-8, w);  // biharmonic penalty, no alloc
  *   cheap_apply(&ctx, blurred, w, restored);
  */
 static inline int cheap_weights_higher_order_tikhonov_deconv_ev(
@@ -2999,24 +3003,107 @@ static inline int cheap_weights_higher_order_tikhonov_deconv_ev(
         for (int i = 0; i < n; ++i)
             if (!isfinite(lap_eigenvalues[i])) return CHEAP_EDOM;
 
-    double* lap_local = NULL;
-    const double* lap = lap_eigenvalues;
-    if (!lap) {
-        lap_local = (double*)malloc((size_t)n * sizeof(double));
-        if (!lap_local) return CHEAP_ENOMEM;
-        cheap__build_laplacian_flat(n, lap_local);
-        lap = lap_local;
-    }
+    const double inv2n = 1.0 / (2.0 * (double)n);
     for (int k = 0; k < n; ++k) {
         double psi = psf_eigenvalues[k];
-        double lv  = lap[k];
+        double lv;
+        if (lap_eigenvalues) {
+            lv = lap_eigenvalues[k];
+        } else {
+            /* Compute 1D Laplacian on-the-fly: 4*sin^2(pi*k/(2n)) */
+            double s = sin(M_PI * (double)k * inv2n);
+            lv = 4.0 * s * s;
+        }
         double pen = (lv > CHEAP_EPS_LOG) ? alpha * pow(lv, p) : 0.0;
         double den = psi * psi + pen + eps;
         if (den < CHEAP_EPS_DIV) den = CHEAP_EPS_DIV;
         weights_out[k] = psi / den;
     }
-    free(lap_local);
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_sample_matern_2d — sample a 2D Matérn-ν Gaussian random field.
+ *
+ * Applies the Matérn spectral filter to `white_noise` and writes the
+ * correlated GRF sample to `out`. The normalization factor 1/(4*nx*ny)
+ * is applied by cheap_apply_2d; the resulting field has unit variance
+ * only if `white_noise` is unit-variance i.i.d. (scale as needed).
+ *
+ * Parameters:
+ *   ctx        — initialized cheap_ctx_2d (nx, ny must match white_noise/out)
+ *   white_noise — flat nx*ny array of i.i.d. N(0,1) draws, row-major
+ *   kappa      — inverse correlation length (> 0)
+ *   nu         — Matérn smoothness (> 0)
+ *   out        — flat nx*ny output array, row-major
+ *
+ * Allocates no heap memory. Uses ctx->workspace as scratch (not thread-safe
+ * on the same ctx). Returns CHEAP_OK on success, error code on failure.
+ *
+ * Usage:
+ *   cheap_ctx_2d ctx;
+ *   cheap_init_2d(&ctx, 128, 128, 0.7, 0.7);
+ *   double noise[128*128], grf[128*128];
+ *   // fill noise with N(0,1) draws ...
+ *   cheap_sample_matern_2d(&ctx, noise, 1.0, 1.5, grf);
+ *   cheap_destroy_2d(&ctx);
+ */
+static inline int cheap_sample_matern_2d(cheap_ctx_2d* restrict ctx,
+                                          const double* restrict white_noise,
+                                          double kappa, double nu,
+                                          double* restrict out)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!white_noise || kappa <= 0.0 || nu <= 0.0 || !out) return CHEAP_EINVAL;
+    const int nx = ctx->nx, ny = ctx->ny, n = ctx->n;
+    /* Pass 1: build Matérn weights into out (temporary use). */
+    int rc = cheap_weights_matern_2d(nx, ny, kappa, nu, out);
+    if (rc != CHEAP_OK) return rc;
+    /* Pass 2: DCT the white noise into workspace. */
+    rc = cheap_forward_2d(ctx, white_noise);
+    if (rc != CHEAP_OK) return rc;
+    /* Pass 3: spectral multiply workspace[i] *= out[i] (weights), then iDCT. */
+    cheap__mul_inplace(ctx->workspace, out, n);
+    fftw_execute(ctx->plan_inv);
+    const double norm = 1.0 / (4.0 * (double)nx * (double)ny);
+    cheap__scale_copy(out, ctx->workspace, norm, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_sample_matern_3d — sample a 3D Matérn-ν Gaussian random field.
+ *
+ * Same as cheap_sample_matern_2d but for a 3D ctx. Writes the GRF sample
+ * to `out` (flat nx*ny*nz, row-major). No heap allocation.
+ *
+ * Usage:
+ *   cheap_ctx_3d ctx;
+ *   cheap_init_3d(&ctx, 32, 32, 32, 0.7, 0.7, 0.7);
+ *   double noise[32*32*32], grf[32*32*32];
+ *   // fill noise ...
+ *   cheap_sample_matern_3d(&ctx, noise, 1.0, 2.5, grf);
+ *   cheap_destroy_3d(&ctx);
+ */
+static inline int cheap_sample_matern_3d(cheap_ctx_3d* restrict ctx,
+                                          const double* restrict white_noise,
+                                          double kappa, double nu,
+                                          double* restrict out)
+{
+    if (!ctx || !ctx->is_initialized) return CHEAP_EUNINIT;
+    if (!white_noise || kappa <= 0.0 || nu <= 0.0 || !out) return CHEAP_EINVAL;
+    const int nx = ctx->nx, ny = ctx->ny, nz = ctx->nz, n = ctx->n;
+    /* Pass 1: build Matérn weights into out (temporary use). */
+    int rc = cheap_weights_matern_3d(nx, ny, nz, kappa, nu, out);
+    if (rc != CHEAP_OK) return rc;
+    /* Pass 2: DCT the white noise into workspace. */
+    rc = cheap_forward_3d(ctx, white_noise);
+    if (rc != CHEAP_OK) return rc;
+    /* Pass 3: spectral multiply, then iDCT into out. */
+    cheap__mul_inplace(ctx->workspace, out, n);
+    fftw_execute(ctx->plan_inv);
+    const double norm = 1.0 / (8.0 * (double)nx * (double)ny * (double)nz);
+    cheap__scale_copy(out, ctx->workspace, norm, n);
     return CHEAP_OK;
 }
 

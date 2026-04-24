@@ -190,6 +190,22 @@ The API has three layers:
 - `cheap_weights_poisson_ev` / `cheap_weights_poisson_2d` / `cheap_weights_poisson_3d` — Poisson inverse-Laplacian, DC projected out (SIMD)
 - `cheap_weights_higher_order_tikhonov_deconv_ev` — deconvolution with `α·μ^p` roughness penalty
 
+**Convenience samplers** (no heap allocation, reuse ctx→workspace as scratch):
+- `cheap_sample_matern_2d(ctx, white_noise, kappa, nu, out)` — one-call 2D Matérn GRF sample
+- `cheap_sample_matern_3d(ctx, white_noise, kappa, nu, out)` — one-call 3D Matérn GRF sample
+
+```c
+/* Sample a 2D Matérn-1.5 GRF on a 128×128 grid */
+cheap_ctx_2d ctx;
+cheap_init_2d(&ctx, 128, 128, 0.7, 0.7);
+
+double noise[128*128], grf[128*128];
+/* fill noise[] with N(0,1) draws from your RNG */
+cheap_sample_matern_2d(&ctx, noise, 1.0 /*kappa*/, 1.5 /*nu*/, grf);
+
+cheap_destroy_2d(&ctx);
+```
+
 The C++ wrapper (`cheap.hpp`) provides RAII via `cheap::Context` and `cheap::RffContext`, with exception-based error handling and optional `std::span` overloads in C++20.
 
 Full documentation: [API.md](API.md)
@@ -232,15 +248,15 @@ C++ targets are built by default. Disable with `-DCHEAP_BUILD_CPP=OFF`.
 
 ## Benchmarks
 
-### ARM64 (ARMv8 rev 1 @ ~2.0 GHz, GCC 11.4.0, `-O3 -march=native`)
+### ARM64 (ARMv8 rev 1 @ ~1.5 GHz, GCC 11.4.0, `-O3 -march=native`)
 
 | Algorithm | N=1,024 | N=8,192 | N=65,536 | Scaling |
 |-----------|---------|---------|----------|---------|
-| KRR solve | 0.018 ms | 0.180 ms | 2.54 ms | O(N log N) |
-| Sinkhorn (50 iters) | 0.087 ms | 0.839 ms | 8.77 ms | O(N log N) |
-| Reparameterization | 0.018 ms | 0.181 ms | 2.45 ms | O(N log N) |
-| Toeplitz matvec | 0.018 ms | 0.180 ms | 2.54 ms | O(N log N) |
-| RFF map (D=256) | 0.004 ms | — | — | O(D) |
+| KRR solve | 0.022 ms | 0.210 ms | 2.94 ms | O(N log N) |
+| Sinkhorn (50 iters) | 0.196 ms | 1.67 ms | 18.40 ms | O(N log N) |
+| Reparameterization | 0.022 ms | 0.212 ms | 2.84 ms | O(N log N) |
+| Toeplitz matvec | 0.022 ms | 0.210 ms | 2.94 ms | O(N log N) |
+| RFF map (D=256) | 0.016 ms | — | — | O(D) |
 
 ### Statistical Benchmarks (30 trials, FFTW_PATIENT)
 
