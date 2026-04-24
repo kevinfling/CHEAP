@@ -29,8 +29,8 @@
  *   - `cheap_apply`, `cheap_forward`, `cheap_inverse` use SIMD
  *     pointwise-mul / scale-copy helpers (AVX2: 4×f64, NEON: 2×f64).
  *   - `cheap_weights_wiener_ev`, `cheap_weights_specnorm_ev`,
- *     `cheap_weights_rmt_hard`, `cheap_weights_rmt_shrink` are
- *     fully vectorized.
+ *     `cheap_weights_rmt_hard`, `cheap_weights_rmt_shrink`,
+ *     `cheap_weights_wiener_deconv_ev` are fully vectorized.
  *   - `cheap_weights_mandelbrot` vectorizes the Re(lnΓ) Lanczos
  *     path on the non-reflection branch.
  *   - Scalar path always compiles for correctness cross-check.
@@ -2173,6 +2173,84 @@ static inline int cheap_weights_rmt_shrink(const double* restrict lambda, int n,
             weights_out[k] = lambda[k] * factor / l;
         }
     }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_wiener_deconv_ev — Wiener deconvolution weights for circulant PSF.
+ *
+ *   weights_out[k] = λ_psf[k] / (λ_psf[k]² + noise_power)
+ *
+ * Frequency-domain Wiener filter for y = PSF * x + noise where the blur
+ * operator is diagonalized by the same DCT-II basis as the covariance.
+ * λ_psf[] = DCT-II(first column of the symmetric circulant Toeplitz PSF).
+ * Obtain via cheap_toeplitz_eigenvalues() or cheap_init_from_toeplitz().
+ *
+ * noise_power = σ_noise² / σ_signal² (or just σ_noise² if you normalize
+ * signal power to 1). Bounded |w_k| ≤ 1/(2√noise_power). Perfectly stable.
+ *
+ * Vectorized AVX2 (4×f64) / NEON (2×f64). Zero UB. Full contracts under
+ * CHEAP_DEBUG_CONTRACTS. Scalar tail is identical to vector path.
+ *
+ * Usage (1D example):
+ *   double psf_eig[N];
+ *   cheap_toeplitz_eigenvalues(&ctx, psf_first_col, psf_eig);
+ *   double weights[N];
+ *   cheap_weights_wiener_deconv_ev(N, psf_eig, noise_power, weights);
+ *   cheap_apply(&ctx, blurred, weights, restored);
+ *
+ * Same call works for 2D/3D — just pass n = nx*ny (or nx*ny*nz) and the
+ * flat row-major eigenvalue grid of the PSF.
+ */
+static inline int cheap_weights_wiener_deconv_ev(int n,
+    const double* restrict psf_eigenvalues,
+    double noise_power,
+    double* restrict weights_out)
+{
+    if (n < 2 || !psf_eigenvalues || noise_power < 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+
+    /* Input contract */
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(psf_eigenvalues[i])) return CHEAP_EDOM;
+
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vnp  = _mm256_set1_pd(noise_power);
+        __m256d veps = _mm256_set1_pd(CHEAP_EPS_DIV);
+        for (; k + 4 <= n; k += 4) {
+            __m256d lam  = _mm256_loadu_pd(psf_eigenvalues + k);
+            __m256d lam2 = _mm256_mul_pd(lam, lam);
+            __m256d den  = _mm256_add_pd(lam2, vnp);
+            den = _mm256_max_pd(den, veps);               /* prevent div0/NaN */
+            __m256d w    = _mm256_div_pd(lam, den);
+            _mm256_storeu_pd(weights_out + k, w);
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vnp  = vdupq_n_f64(noise_power);
+        float64x2_t veps = vdupq_n_f64(CHEAP_EPS_DIV);
+        for (; k + 2 <= n; k += 2) {
+            float64x2_t lam  = vld1q_f64(psf_eigenvalues + k);
+            float64x2_t lam2 = vmulq_f64(lam, lam);
+            float64x2_t den  = vaddq_f64(lam2, vnp);
+            den = vmaxq_f64(den, veps);
+            float64x2_t w    = vdivq_f64(lam, den);
+            vst1q_f64(weights_out + k, w);
+        }
+    }
+#endif
+    /* Scalar tail — identical arithmetic to vector path */
+    for (; k < n; ++k) {
+        double lam = psf_eigenvalues[k];
+        double den = lam * lam + noise_power;
+        den = fmax(den, CHEAP_EPS_DIV);
+        weights_out[k] = lam / den;
+    }
+
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }

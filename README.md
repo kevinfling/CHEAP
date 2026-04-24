@@ -26,6 +26,7 @@ The choice of weight vector determines the operation:
 | Toeplitz matvec / solve | `DCT(first_col)[k]` | O(N log N) |
 | Kalman prediction | `P[k] + lambda[k]` | O(N) |
 | Wiener filter | `lk / (lk + sigma^2)` | O(N log N) |
+| Wiener deconvolution | `lk_psf / (lk_psf² + noise_power)` | O(N log N) |
 | 2D/3D Laplacian | sum of `4sin²` terms | O(N log N) |
 | 2D/3D fractional Laplacian | `(laplacian)^α` | O(N log N) |
 | Spectral normalization | `1 / sqrt(lk + eps)` | O(N log N) |
@@ -170,6 +171,7 @@ The API has three layers:
 **4. Spectral weight constructors** — compute weight vectors for `cheap_apply`:
 - `cheap_weights_fractional` — fractional integration/differentiation
 - `cheap_weights_wiener` / `cheap_weights_wiener_ev` — Wiener filter (Laplacian or custom eigenvalues)
+- `cheap_weights_wiener_deconv_ev` — Wiener deconvolution for circulant PSF (blur removal)
 - `cheap_weights_specnorm` / `cheap_weights_specnorm_ev` — spectral normalization / whitening
 - `cheap_weights_kpca_hard` / `cheap_weights_kpca_soft` — kernel PCA projection
 - `cheap_weights_mandelbrot` — Mandelbrot multifractal weights (complex Gamma ratio)

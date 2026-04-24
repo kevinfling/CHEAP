@@ -66,6 +66,7 @@ where **w** is a weight vector chosen according to the specific problem. By sele
 | Mandelbrot Multifractal | w_k = \|Γ(H + iτ_k) / Γ(1−H + iτ_k)\| | Index-based |
 | RMT Hard Threshold | w_k = λ_k · 𝟙(λ_k > λ₊) | User-provided |
 | RMT Optimal Shrinkage | Donoho–Gavish (see §3.5.5) | User-provided |
+| Wiener Deconvolution | w_k = λ_psf,k / (λ_psf,k² + η) | User-provided (PSF) |
 
 Here we distinguish two eigenvalue families that arise naturally in the framework: the *Flandrin eigenvalues* λ_k of the dfBm covariance (§2.2), and the *Laplacian eigenvalues* μ_k = 4 sin²(πk/2n) of the discrete Neumann Laplacian (§3.5.1). Some weights are purely index-based and require no precomputed eigenvalues. Others accept user-provided eigenvalues from empirical data. This distinction is important: confusing the two families produces mathematically well-defined but physically meaningless results.
 
@@ -198,6 +199,24 @@ where ℓ₊ = (1 + √c)² and ℓ₋ = (1 − √c)². This reduces the upward
 Both variants accept user-provided eigenvalues rather than computing them from the index. This is a deliberate design choice: the eigenvalues to be denoised typically come from empirical data (sample covariance spectra), not from analytical formulas. The user is responsible for estimating σ² and c from the data; we provide the spectral surgery, not the diagnostics.
 
 **Honest limitations.** The Marchenko–Pastur law is asymptotic: it assumes n, p → ∞ with c = n/p held fixed. For small samples (n < 100), finite-size corrections become relevant and the bulk edges are only approximate. Furthermore, the optimal shrinkage formula assumes that the population covariance has a spiked structure (finitely many signal eigenvalues above a flat noise floor). For population covariances with gradually decaying eigenvalues, the hard spike/bulk dichotomy breaks down. In such settings, nonparametric approaches [17] may be more appropriate, though they typically require O(n²) computation.
+
+#### 3.5.7 Wiener Deconvolution
+
+When an observation y is the convolution of a latent signal x with a known point-spread function (PSF) h corrupted by additive white noise:
+
+$$y = h * x + \varepsilon, \quad \varepsilon \sim \mathcal{N}(0, \eta I),$$
+
+the minimum mean-square-error linear inverse filter in the spectral domain is the classical Wiener deconvolution filter. If the PSF is symmetric and its circulant approximation has DCT-II eigenvalues λ_psf,k (obtained via `cheap_toeplitz_eigenvalues`), then the optimal spectral weights are:
+
+$$w_k = \frac{\lambda_{\text{psf},k}}{\lambda_{\text{psf},k}^2 + \eta},$$
+
+where η = σ²_noise / σ²_signal is the inverse signal-to-noise ratio (set η = σ²_noise directly when signal power is normalized to 1). These weights strike the bias–variance optimum: at frequencies where the PSF has large response, near-perfect inversion is applied; at frequencies where the PSF is weak (near zero), the filter suppresses the amplified noise by rolling off gracefully rather than inverting blindly. The magnitude is bounded by |w_k| ≤ 1/(2√η) for all k, so the filter is unconditionally stable regardless of PSF zeros.
+
+This differs from the denoising Wiener filter of §3.5.2 (weight μ_k / (μ_k + σ²)) in a structurally important way: the denominator here is quadratic in λ_psf, not linear. The quadratic form arises because the PSF eigenvalue appears twice—once in the numerator from H*(ω) and once in the denominator from |H(ω)|²—whereas the denoising filter has a scalar signal power in the numerator with no corresponding PSF.
+
+**Obtaining PSF eigenvalues.** The function `cheap_toeplitz_eigenvalues` computes the DCT-II of the first column of a symmetric Toeplitz matrix, which is exactly λ_psf when the PSF's circulant extension is constructed in the standard way. For 2D or 3D problems, pass the flat row-major PSF eigenvalue grid (dimension nx·ny or nx·ny·nz) directly to `cheap_weights_wiener_deconv_ev`; no 2D-specific variant is needed because the weight formula is elementwise.
+
+**Honest limitations.** The circulant PSF assumption introduces wrap-around artifacts at image boundaries. For signals with non-periodic boundary conditions, the circulant approximation of the true convolution matrix may introduce edge ringing that the Wiener filter cannot remove. Standard mitigations—boundary padding, windowing, or replacing the circulant model with a half-space Toeplitz model—are outside the scope of this primitive.
 
 ---
 
