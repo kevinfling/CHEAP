@@ -220,6 +220,71 @@ This differs from the denoising Wiener filter of §3.5.2 (weight μ_k / (μ_k + 
 
 ---
 
+## 3.6 GRF and PDE Spectral Weight Families (v0.3.0)
+
+The following five weight families extend CHEAP into Gaussian random field (GRF) simulation, PDE preconditioning, and penalized deconvolution. All are O(N) construction cost; the O(N log N) DCT in `cheap_apply` always dominates total cost.
+
+### 3.6.1 Matérn Covariance Weights
+
+The Matérn-ν covariance kernel on ℝ^d has a Fourier-domain spectral density proportional to (κ² + ‖ξ‖²)^(-(ν + d/2)). In the CHEAP spectral framework the spatial frequencies are replaced by the Laplacian eigenvalues μ_k = 4 sin²(πk/2n), which play the role of ‖ξ‖² on a discrete grid. The weight per mode is
+
+    w[k] = (κ² + μ[k])^(-ν)
+
+where κ > 0 is the inverse correlation length and ν > 0 is the Matérn smoothness parameter. The fractional Sobolev norm induced by this weight is the discrete analogue of the SPDE-based Matérn norm introduced by Lindgren, Rue, and Lindström [18]. To sample a Matérn-ν GRF: draw white noise z, compute `cheap_apply` with these weights, and scale by the appropriate normalizing constant.
+
+The DC bin (μ[0] = 0) contributes a weight κ^(-2ν) — finite and positive, reflecting that the DC component has the same covariance as any other mode but is not penalized by the Laplacian.
+
+The `_2d` and `_3d` convenience variants use the tensor-product Laplacian (sum of per-axis `4sin²` terms), consistent with the 2D/3D Laplacian weight constructors in §3.5.1. The `anisotropic_matern_2d/3d` variants independently scale each axis by κ_x², κ_y², κ_z², producing ellipsoidal correlation structure. Because the DC component of the anisotropic variant requires a regularization floor (CHEAP_EPS_LOG = 1e-12) to avoid a 0^(-ν) singularity, users who want exact DC suppression should zero w[0] after the call.
+
+**Honest limitations.** The discrete Laplacian eigenvalues are an approximation of the continuous Fourier frequencies. For ν > 2 the tail of the Matérn spectrum falls off faster than the Laplacian eigenvalue spacing, so the high-frequency modes see quantization error relative to the continuous kernel. For applications requiring sub-percent accuracy in covariance matching, calibrate κ against the target continuous kernel numerically.
+
+### 3.6.2 Heat Propagator Weights
+
+    w[k] = exp(-t · μ[k])
+
+This is the spectral representation of the heat kernel e^(tΔ) under Neumann boundary conditions. At t = 0 the operator is the identity; as t → ∞ the field flattens to its DC component. The DC mode (μ[0] = 0) satisfies exp(0) = 1.0 exactly — DC is always preserved by the heat equation.
+
+**Connection to Sinkhorn.** The Gibbs kernel exp(-λ_k/ε) used in `cheap_sinkhorn` is formally a heat propagator with t = 1/ε applied to the Flandrin spectrum (μ = ctx→lambda). The heat propagator weight constructor operates on Laplacian eigenvalues and accepts any positive t, making it suitable for anisotropic diffusion preprocessing.
+
+**Semigroup property.** The heat propagator satisfies the composition law: w(t₁)[k] · w(t₂)[k] = w(t₁+t₂)[k]. This is verified in the test suite (`test_weights_heat_propagator_ev`) and allows splitting a large diffusion step into smaller substeps without loss of exactness.
+
+### 3.6.3 Biharmonic Inverse Weights
+
+    w[k] = 1 / (μ[k]² + ε)
+
+The biharmonic operator Δ² has eigenvalues μ_k² under the Laplacian basis. Inverting it spectrally recovers the solution to Δ²u = f (e.g., thin-plate spline interpolation, Euler–Bernoulli beam deflection, 2D Stokes flow stream function). The regularization ε > 0 is necessary because μ[0] = 0 makes the unregularized biharmonic singular at DC. With ε > 0 the DC weight is 1/ε — a finite constant that penalizes the mean level equally for all ε.
+
+The `biharmonic_ev` function and the second pass of `biharmonic_2d/3d` are vectorized (AVX2: 4×f64, NEON: 2×f64) because the formula involves only multiplication, addition, and division.
+
+### 3.6.4 Poisson Inverse Weights
+
+    w[0] = 0,   w[k] = 1 / (μ[k] + ε)   for k ≥ 1
+
+This inverts the negative Laplacian -Δ on the mean-free subspace, solving the Poisson equation -Δu = f when f has zero mean. The DC projection (w[0] = 0) enforces the solvability condition: the Poisson equation has no solution when f has nonzero mean (the Laplacian has a zero eigenvalue). Setting w[0] = 0 projects out the null space, selecting the solution with zero mean.
+
+**Comparison to spectral normalization.** `cheap_weights_specnorm_ev` weights by 1/√(μ+ε) (whitening: equalizes all spectral components to unit variance). The Poisson weight 1/(μ+ε) is the exact spectral inverse of the Laplacian, not a normalization. For ε → 0, the Poisson weight diverges at low frequencies (large correlation length), which is physically correct: the Green's function of -Δ in free space is the harmonic potential.
+
+The SIMD implementation skips the DC bin (starts at k = 1) to preserve the exact zero; the unaligned load at k = 1 is handled by the `loadu` variants throughout.
+
+### 3.6.5 Higher-Order Tikhonov Deconvolution Weights
+
+    w[k] = ψ[k] / (ψ[k]² + α·μ[k]^p + ε)
+
+where ψ[k] are PSF eigenvalues (as in §3.5.7) and μ[k] are Laplacian eigenvalues. The penalty term α·μ[k]^p generalizes the flat noise floor of Wiener deconvolution (§3.5.7):
+
+- p = 0: flat penalty, reduces to Wiener deconvolution with noise power α + ε.
+- p = 1: gradient (Tikhonov) penalty — penalizes roughness linearly.
+- p = 2: biharmonic penalty — penalizes roughness quadratically, giving smoother solutions.
+- p > 2: super-biharmonic penalty, strongly suppresses high-frequency artifacts.
+
+At DC: μ[0] = 0 so pow(0, p) = 0 for any p > 0 (guaranteed by C99), leaving w[0] = ψ[0]/(ψ[0]² + ε). If ψ[0] = 0 and ε = 0 the denominator vanishes; the implementation guards this with a `fmax(den, CHEAP_EPS_DIV)` floor.
+
+When `lap_eigenvalues == NULL` the function computes a 1D Laplacian spectrum internally via `malloc`. For 2D/3D problems the caller should pass the appropriate flat 2D/3D Laplacian grid (from `cheap_weights_laplacian_2d/3d`) explicitly.
+
+**Reference [18]:** F. Lindgren, H. Rue, J. Lindström, "An explicit link between Gaussian fields and Gaussian Markov random fields: the stochastic partial differential equation approach," *Journal of the Royal Statistical Society: Series B*, 73(4):423–498, 2011.
+
+---
+
 ## 4. Mathematical Analysis
 
 **Theorem 3** *(Eigenvector Perturbation Bound).* The difference between the true eigenvectors of the dfBm covariance and the DCT basis is bounded by O(1/n) for sufficiently large n.
@@ -245,6 +310,8 @@ CHEAP occupies a specific "sweet spot" in the algorithmic trade-off space:
 CHEAP rests on the observation that many covariance operators are asymptotically Toeplitz and admit inexpensive spectral factorization via the DCT. By combining classical perturbation theory with modern deterministic RKHS frameworks, we provide a linearithmic path to solving complex problems in kernel learning, optimal transport, signal processing, and covariance estimation.
 
 The extended weight families introduced in §3.5 demonstrate that the universal spectral primitive accommodates a wider class of operations than originally anticipated. Two distinct eigenvalue families—the Flandrin spectrum of dfBm covariance and the Laplacian spectrum of the discrete second-difference operator—both admit O(n) construction and exact DCT diagonalization, yielding separate but equally efficient pathways through the same algorithmic primitive. The Mandelbrot multifractal weights show that even transcendental operations (complex Gamma ratios via Lanczos approximation) fit naturally into the framework, while RMT denoising demonstrates that CHEAP can serve as an efficient backend for statistical procedures whose eigenvalues originate outside the framework entirely.
+
+The v0.3.0 weight families (§3.6) extend the reach further into GRF simulation and PDE-constrained inversion. Matérn covariance weights connect the CHEAP framework to the SPDE formulation of Gaussian random fields [18], enabling exact GRF sampling on regular grids at O(N log N) cost. The heat propagator, biharmonic inverse, and Poisson inverse weights provide spectral preconditioners for parabolic and elliptic PDEs with Neumann boundary conditions. The higher-order Tikhonov deconvolution weight unifies the Wiener deconvolution of §3.5.7 with flexible roughness penalties, enabling a continuous family of deconvolution operators parameterized by a single exponent p. All six new families maintain the O(N) construction guarantee and require no changes to the existing context or transform infrastructure.
 
 The result is a package that is mathematically rigorous, numerically stable, and — above all — fiscally responsible.
 
@@ -285,3 +352,5 @@ The result is a package that is mathematically rigorous, numerically stable, and
 [16] Donoho, D. L., Gavish, M., & Johnstone, I. M. (2018). Optimal shrinkage of eigenvalues in the spiked covariance model. *Ann. Statist.*, 46(4), 1742–1778.
 
 [17] Ledoit, O., & Wolf, M. (2020). Analytical nonlinear shrinkage of large-dimensional covariance matrices. *Ann. Statist.*, 48(5), 3043–3065.
+
+[18] Lindgren, F., Rue, H., & Lindström, J. (2011). An explicit link between Gaussian fields and Gaussian Markov random fields: the stochastic partial differential equation approach. *Journal of the Royal Statistical Society: Series B*, 73(4), 423–498.

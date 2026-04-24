@@ -65,12 +65,27 @@
  *
  * C++ wrapper: `cheap::Context2D`, `cheap::Context3D` with span overloads.
  * ----------------------------------------------------------------
+ * v0.3.0-tensor-weights — GRF and PDE spectral weights
+ * ----------------------------------------------------------------
+ * New weight constructors (no ctx required, pure spectral math):
+ *   - `cheap_weights_laplacian_ev`               — flat Laplacian (_ev alias)
+ *   - `cheap_weights_matern_ev/2d/3d`            — Matérn covariance (GRF)
+ *   - `cheap_weights_anisotropic_matern_2d/3d`   — anisotropic Matérn
+ *   - `cheap_weights_heat_propagator_ev/2d/3d`   — heat equation propagator
+ *   - `cheap_weights_biharmonic_ev/2d/3d`        — biharmonic inverse (SIMD)
+ *   - `cheap_weights_poisson_ev/2d/3d`           — Poisson inverse (SIMD)
+ *   - `cheap_weights_higher_order_tikhonov_deconv_ev` — HOT deconvolution
+ *
+ * SIMD: biharmonic_ev, poisson_ev and the second pass of their
+ * _2d/_3d variants are AVX2/NEON vectorized. Matern, heat, and
+ * HOT-deconv functions are scalar-only (pow/exp in hot path).
+ * ----------------------------------------------------------------
  */
 
 #define CHEAP_VERSION_MAJOR 0
-#define CHEAP_VERSION_MINOR 2
+#define CHEAP_VERSION_MINOR 3
 #define CHEAP_VERSION_PATCH 0
-#define CHEAP_VERSION "0.2.0-tensor"
+#define CHEAP_VERSION "0.3.0-tensor-weights"
 
 #include <fftw3.h>
 #include <math.h>
@@ -2251,6 +2266,756 @@ static inline int cheap_weights_wiener_deconv_ev(int n,
         weights_out[k] = lam / den;
     }
 
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/* ============================================================
+ * v0.3.0-tensor-weights — GRF, Heat, Biharmonic, Poisson,
+ * Higher-Order Tikhonov weight constructors
+ * ============================================================ */
+
+/*
+ * cheap__build_laplacian_flat — fill out[k] = 4*sin²(π*k/(2*n)), out[0]=0.
+ * Private helper. Caller must validate n >= 2 and out != NULL.
+ */
+static inline void cheap__build_laplacian_flat(int n, double* restrict out)
+{
+    out[0] = 0.0;
+    for (int k = 1; k < n; ++k) {
+        double s = sin(M_PI * (double)k / (2.0 * (double)n));
+        out[k] = 4.0 * s * s;
+    }
+}
+
+/*
+ * cheap_weights_laplacian_ev — flat Laplacian eigenvalues (_ev convention).
+ *
+ *   weights_out[k] = 4 * sin²(π*k / (2*n)),   k = 0..n-1
+ *
+ * Identical formula to cheap_weights_laplacian. This alias exists so the
+ * output can be passed directly to matern_ev, poisson_ev, biharmonic_ev,
+ * etc. without the caller needing to know it came from the Laplacian.
+ *
+ * Works with any flat buffer of length n — pass n = nx*ny for 2D grids
+ * if you want the 1D Laplacian spectrum tiled flat (unusual; prefer
+ * cheap_weights_laplacian_2d for proper tensor-product 2D spectra).
+ *
+ * Usage:
+ *   double mu[N];
+ *   cheap_weights_laplacian_ev(N, mu);
+ *   double w[N];
+ *   cheap_weights_matern_ev(N, mu, 1.0, 1.5, w);  // Matérn-1.5 GRF weights
+ */
+static inline int cheap_weights_laplacian_ev(int n, double* restrict weights_out)
+{
+    if (n < 2 || !weights_out) return CHEAP_EINVAL;
+    cheap__build_laplacian_flat(n, weights_out);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    CHEAP_CONTRACT_NONDEC_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_matern_ev — Matérn covariance spectral weights.
+ *
+ *   weights_out[k] = (κ² + μ[k])^(-ν),   k = 0..n-1
+ *
+ * Spectral density of the Matérn-ν covariance kernel when μ[] are the
+ * spatial-frequency squared values (e.g. Laplacian eigenvalues). Sampling
+ * white noise z, applying cheap_apply with these weights, and normalizing
+ * gives a Matérn-ν Gaussian random field (SPDE formulation, Lindgren et al.
+ * 2011). κ > 0 is the inverse correlation length; ν > 0 is the smoothness.
+ *
+ * DC (μ[0] = 0 from Laplacian): base = κ² > 0, so w[0] = κ^(-2ν). Finite.
+ *
+ * Works with both Flandrin and Laplacian eigenvalue bases.
+ *
+ * Usage:
+ *   double mu[N], w[N];
+ *   cheap_weights_laplacian_ev(N, mu);
+ *   cheap_weights_matern_ev(N, mu, 1.0, 1.5, w);  // Matérn-1.5
+ *   cheap_apply(&ctx, white_noise, w, grf_sample);
+ */
+static inline int cheap_weights_matern_ev(int n,
+                                           const double* restrict mu,
+                                           double kappa, double nu,
+                                           double* restrict weights_out)
+{
+    if (n < 2 || !mu || kappa <= 0.0 || nu <= 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(mu[i])) return CHEAP_EDOM;
+    double kk = kappa * kappa;
+    for (int k = 0; k < n; ++k) {
+        double base = kk + mu[k];
+        if (base < CHEAP_EPS_LOG) base = CHEAP_EPS_LOG;
+        weights_out[k] = pow(base, -nu);
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_matern_2d — isotropic 2D Matérn covariance weights.
+ *
+ *   weights_out[j*ny + k] = (κ² + lx[j] + ly[k])^(-ν)
+ *
+ * where lx[j] = 4*sin²(πj/(2*nx)), ly[k] = 4*sin²(πk/(2*ny)).
+ * Equivalent to calling cheap_weights_laplacian_2d then matern_ev on the
+ * result. DC: weights_out[0] = κ^(-2ν) — finite, positive.
+ *
+ * Row-major: weights_out[j*ny + k], j in [0,nx), k in [0,ny).
+ *
+ * Usage:
+ *   double w[NX*NY];
+ *   cheap_weights_matern_2d(NX, NY, 1.0, 1.5, w);
+ *   cheap_apply_2d(&ctx2d, noise, w, grf_sample);
+ */
+static inline int cheap_weights_matern_2d(int nx, int ny,
+                                           double kappa, double nu,
+                                           double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || kappa <= 0.0 || nu <= 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    double kk = kappa * kappa;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double base = kk + lx + 4.0 * sy * sy;
+            if (base < CHEAP_EPS_LOG) base = CHEAP_EPS_LOG;
+            weights_out[j * ny + k] = pow(base, -nu);
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_matern_3d — isotropic 3D Matérn covariance weights.
+ *
+ *   weights_out[(j*ny+k)*nz + l] = (κ² + lx[j] + ly[k] + lz[l])^(-ν)
+ *
+ * Row-major: (j*ny+k)*nz+l. DC: κ^(-2ν) — finite, positive.
+ *
+ * Usage:
+ *   double w[NX*NY*NZ];
+ *   cheap_weights_matern_3d(NX, NY, NZ, 1.0, 2.5, w);
+ */
+static inline int cheap_weights_matern_3d(int nx, int ny, int nz,
+                                           double kappa, double nu,
+                                           double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || kappa <= 0.0 || nu <= 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    double kk = kappa * kappa;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                double base = kk + lx + ly + 4.0 * sz * sz;
+                if (base < CHEAP_EPS_LOG) base = CHEAP_EPS_LOG;
+                weights_out[(j * ny + k) * nz + l] = pow(base, -nu);
+            }
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny * nz);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_anisotropic_matern_2d — anisotropic 2D Matérn weights.
+ *
+ *   weights_out[j*ny + k] = (κ_x²·lx[j] + κ_y²·ly[k] + CHEAP_EPS_LOG)^(-ν)
+ *
+ * Per-axis inverse length scales κ_x, κ_y allow directional anisotropy.
+ * CHEAP_EPS_LOG (1e-12) regularizes the DC bin: w[0] ≈ (1e-12)^(-ν), which
+ * is large but finite. Zero it after the call if you want DC suppressed.
+ *
+ * Row-major: weights_out[j*ny + k].
+ *
+ * Usage:
+ *   double w[NX*NY];
+ *   cheap_weights_anisotropic_matern_2d(NX, NY, 2.0, 0.5, 1.5, w);
+ *   w[0] = 0.0;  // suppress DC if desired
+ */
+static inline int cheap_weights_anisotropic_matern_2d(int nx, int ny,
+                                                        double kappa_x,
+                                                        double kappa_y,
+                                                        double nu,
+                                                        double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || kappa_x <= 0.0 || kappa_y <= 0.0 || nu <= 0.0
+        || !weights_out)
+        return CHEAP_EINVAL;
+    double kkx = kappa_x * kappa_x;
+    double kky = kappa_y * kappa_y;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double base = kkx * lx + kky * 4.0 * sy * sy + CHEAP_EPS_LOG;
+            weights_out[j * ny + k] = pow(base, -nu);
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_anisotropic_matern_3d — anisotropic 3D Matérn weights.
+ *
+ *   weights_out[(j*ny+k)*nz+l] =
+ *       (κ_x²·lx[j] + κ_y²·ly[k] + κ_z²·lz[l] + CHEAP_EPS_LOG)^(-ν)
+ *
+ * DC: w[0] ≈ (CHEAP_EPS_LOG)^(-ν) — large but finite. Zero if desired.
+ * Row-major: (j*ny+k)*nz+l.
+ */
+static inline int cheap_weights_anisotropic_matern_3d(int nx, int ny, int nz,
+                                                        double kappa_x,
+                                                        double kappa_y,
+                                                        double kappa_z,
+                                                        double nu,
+                                                        double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || kappa_x <= 0.0 || kappa_y <= 0.0
+        || kappa_z <= 0.0 || nu <= 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    double kkx = kappa_x * kappa_x;
+    double kky = kappa_y * kappa_y;
+    double kkz = kappa_z * kappa_z;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                double base = kkx * lx + kky * ly + kkz * 4.0 * sz * sz
+                              + CHEAP_EPS_LOG;
+                weights_out[(j * ny + k) * nz + l] = pow(base, -nu);
+            }
+        }
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny * nz);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_heat_propagator_ev — heat equation propagator weights.
+ *
+ *   weights_out[k] = exp(-t · μ[k]),   k = 0..n-1
+ *
+ * Spectral representation of the heat kernel e^(t·Δ). At t=0 this is the
+ * identity; as t→∞ all high-frequency components decay. The DC component
+ * (μ[0]=0) satisfies exp(0)=1.0 — DC is always preserved. Attenuate it
+ * manually after the call if the application requires mean removal.
+ *
+ * Connection to Sinkhorn: the Gibbs kernel exp(-λ_k/ε) is a heat propagator
+ * with t = 1/ε on the Flandrin spectrum (μ = ctx->lambda).
+ *
+ * Works with both Flandrin and Laplacian bases. t > 0 required.
+ *
+ * Usage:
+ *   double mu[N], w[N];
+ *   cheap_weights_laplacian_ev(N, mu);
+ *   cheap_weights_heat_propagator_ev(N, mu, 0.1, w);  // t=0.1
+ *   cheap_apply(&ctx, field, w, smoothed);
+ */
+static inline int cheap_weights_heat_propagator_ev(int n,
+                                                    const double* restrict mu,
+                                                    double t,
+                                                    double* restrict weights_out)
+{
+    if (n < 2 || !mu || t <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(mu[i])) return CHEAP_EDOM;
+    for (int k = 0; k < n; ++k)
+        weights_out[k] = exp(-t * mu[k]);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_heat_propagator_2d — 2D heat propagator weights.
+ *
+ *   weights_out[j*ny + k] = exp(-t · (lx[j] + ly[k]))
+ *
+ * Builds 2D Laplacian in-place (pass 1), then applies exp(-t··) (pass 2).
+ * DC: exp(0) = 1.0. Row-major: weights_out[j*ny + k].
+ *
+ * Usage:
+ *   double w[NX*NY];
+ *   cheap_weights_heat_propagator_2d(NX, NY, 0.05, w);
+ */
+static inline int cheap_weights_heat_propagator_2d(int nx, int ny,
+                                                    double t,
+                                                    double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || t <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            weights_out[j * ny + k] = lx + 4.0 * sy * sy;
+        }
+    }
+    const int N = nx * ny;
+    for (int i = 0; i < N; ++i)
+        weights_out[i] = exp(-t * weights_out[i]);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, N);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_heat_propagator_3d — 3D heat propagator weights.
+ *
+ *   weights_out[(j*ny+k)*nz+l] = exp(-t · (lx[j] + ly[k] + lz[l]))
+ *
+ * DC: 1.0. Row-major: (j*ny+k)*nz+l.
+ */
+static inline int cheap_weights_heat_propagator_3d(int nx, int ny, int nz,
+                                                    double t,
+                                                    double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || t <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                weights_out[(j * ny + k) * nz + l] = lx + ly + 4.0 * sz * sz;
+            }
+        }
+    }
+    const int N = nx * ny * nz;
+    for (int i = 0; i < N; ++i)
+        weights_out[i] = exp(-t * weights_out[i]);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, N);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_biharmonic_ev — biharmonic inverse weights.
+ *
+ *   weights_out[k] = 1 / (μ[k]² + ε),   k = 0..n-1
+ *
+ * Inverts the biharmonic operator Δ² in the spectral domain. Appears in
+ * thin-plate spline interpolation, Euler–Bernoulli beam equations, and 2D
+ * Stokes flow. ε > 0 regularizes the DC bin: w[0] = 1/ε — bounded and
+ * finite. Zero the DC after the call if mean-free output is required.
+ *
+ * Works with both Flandrin and Laplacian bases. Vectorized (AVX2/NEON).
+ *
+ * Usage:
+ *   double mu[N], w[N];
+ *   cheap_weights_laplacian_ev(N, mu);
+ *   cheap_weights_biharmonic_ev(N, mu, 1e-4, w);
+ *   cheap_apply(&ctx, rhs, w, solution);
+ */
+static inline int cheap_weights_biharmonic_ev(int n,
+                                               const double* restrict mu,
+                                               double eps,
+                                               double* restrict weights_out)
+{
+    if (n < 2 || !mu || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(mu[i])) return CHEAP_EDOM;
+    int k = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d veps = _mm256_set1_pd(eps);
+        for (; k + 4 <= n; k += 4) {
+            __m256d vm  = _mm256_loadu_pd(mu + k);
+            __m256d vm2 = _mm256_mul_pd(vm, vm);
+            __m256d den = _mm256_add_pd(vm2, veps);
+            _mm256_storeu_pd(weights_out + k, _mm256_div_pd(vone, den));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t veps = vdupq_n_f64(eps);
+        for (; k + 2 <= n; k += 2) {
+            float64x2_t vm  = vld1q_f64(mu + k);
+            float64x2_t vm2 = vmulq_f64(vm, vm);
+            float64x2_t den = vaddq_f64(vm2, veps);
+            vst1q_f64(weights_out + k, vdivq_f64(vone, den));
+        }
+    }
+#endif
+    for (; k < n; ++k) {
+        double m2 = mu[k] * mu[k];
+        weights_out[k] = 1.0 / (m2 + eps);
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_biharmonic_2d — 2D biharmonic inverse weights.
+ *
+ *   weights_out[j*ny + k] = 1 / ((lx[j]+ly[k])² + ε)
+ *
+ * Builds 2D Laplacian in-place (pass 1), then applies biharmonic formula
+ * with SIMD (pass 2). DC: 1/ε. Row-major: weights_out[j*ny + k].
+ *
+ * Usage:
+ *   double w[NX*NY];
+ *   cheap_weights_biharmonic_2d(NX, NY, 1e-4, w);
+ */
+static inline int cheap_weights_biharmonic_2d(int nx, int ny,
+                                               double eps,
+                                               double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            weights_out[j * ny + k] = lx + 4.0 * sy * sy;
+        }
+    }
+    const int N = nx * ny;
+    int i = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d veps = _mm256_set1_pd(eps);
+        for (; i + 4 <= N; i += 4) {
+            __m256d vm  = _mm256_loadu_pd(weights_out + i);
+            __m256d vm2 = _mm256_mul_pd(vm, vm);
+            __m256d den = _mm256_add_pd(vm2, veps);
+            _mm256_storeu_pd(weights_out + i, _mm256_div_pd(vone, den));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t veps = vdupq_n_f64(eps);
+        for (; i + 2 <= N; i += 2) {
+            float64x2_t vm  = vld1q_f64(weights_out + i);
+            float64x2_t vm2 = vmulq_f64(vm, vm);
+            float64x2_t den = vaddq_f64(vm2, veps);
+            vst1q_f64(weights_out + i, vdivq_f64(vone, den));
+        }
+    }
+#endif
+    for (; i < N; ++i) {
+        double m2 = weights_out[i] * weights_out[i];
+        weights_out[i] = 1.0 / (m2 + eps);
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, N);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_biharmonic_3d — 3D biharmonic inverse weights.
+ *
+ *   weights_out[(j*ny+k)*nz+l] = 1 / ((lx[j]+ly[k]+lz[l])² + ε)
+ *
+ * DC: 1/ε. Row-major: (j*ny+k)*nz+l.
+ */
+static inline int cheap_weights_biharmonic_3d(int nx, int ny, int nz,
+                                               double eps,
+                                               double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || eps <= 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                weights_out[(j * ny + k) * nz + l] = lx + ly + 4.0 * sz * sz;
+            }
+        }
+    }
+    const int N = nx * ny * nz;
+    int i = 0;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d veps = _mm256_set1_pd(eps);
+        for (; i + 4 <= N; i += 4) {
+            __m256d vm  = _mm256_loadu_pd(weights_out + i);
+            __m256d vm2 = _mm256_mul_pd(vm, vm);
+            __m256d den = _mm256_add_pd(vm2, veps);
+            _mm256_storeu_pd(weights_out + i, _mm256_div_pd(vone, den));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t veps = vdupq_n_f64(eps);
+        for (; i + 2 <= N; i += 2) {
+            float64x2_t vm  = vld1q_f64(weights_out + i);
+            float64x2_t vm2 = vmulq_f64(vm, vm);
+            float64x2_t den = vaddq_f64(vm2, veps);
+            vst1q_f64(weights_out + i, vdivq_f64(vone, den));
+        }
+    }
+#endif
+    for (; i < N; ++i) {
+        double m2 = weights_out[i] * weights_out[i];
+        weights_out[i] = 1.0 / (m2 + eps);
+    }
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, N);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_poisson_ev — Poisson inverse-Laplacian weights.
+ *
+ *   weights_out[0] = 0.0                        (DC: null space of Laplacian)
+ *   weights_out[k] = 1 / (μ[k] + ε),   k = 1..n-1
+ *
+ * Inverts -Δ on the mean-free subspace. The DC projection (w[0]=0) enforces
+ * the compatible solvability condition: the right-hand side must have zero
+ * mean for -Δu = f to have a unique solution up to a constant.
+ *
+ * ε >= 0. With ε = 0 the caller must guarantee μ[k] > 0 for k > 0 (true
+ * for Laplacian eigenvalues on any grid). ε > 0 adds Tikhonov-style DC
+ * damping to the non-DC modes.
+ *
+ * Contrast with cheap_weights_specnorm_ev: that weights by 1/√(μ+ε)
+ * (whitening), while this weights by 1/(μ+ε) (exact spectral inverse).
+ *
+ * Works with both Flandrin and Laplacian bases. Vectorized (AVX2/NEON).
+ *
+ * Usage:
+ *   double mu[N], w[N], u[N];
+ *   cheap_weights_laplacian_ev(N, mu);
+ *   cheap_weights_poisson_ev(N, mu, 1e-8, w);
+ *   cheap_apply(&ctx, rhs, w, u);  // solves -Δu ≈ rhs
+ */
+static inline int cheap_weights_poisson_ev(int n,
+                                            const double* restrict mu,
+                                            double eps,
+                                            double* restrict weights_out)
+{
+    if (n < 2 || !mu || eps < 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(mu[i])) return CHEAP_EDOM;
+    weights_out[0] = 0.0;
+    int k = 1;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d veps = _mm256_set1_pd(eps);
+        for (; k + 4 <= n; k += 4) {
+            __m256d vm  = _mm256_loadu_pd(mu + k);
+            __m256d den = _mm256_add_pd(vm, veps);
+            _mm256_storeu_pd(weights_out + k, _mm256_div_pd(vone, den));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t veps = vdupq_n_f64(eps);
+        for (; k + 2 <= n; k += 2) {
+            float64x2_t vm  = vld1q_f64(mu + k);
+            float64x2_t den = vaddq_f64(vm, veps);
+            vst1q_f64(weights_out + k, vdivq_f64(vone, den));
+        }
+    }
+#endif
+    for (; k < n; ++k)
+        weights_out[k] = 1.0 / (mu[k] + eps);
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_poisson_2d — 2D Poisson inverse-Laplacian weights.
+ *
+ *   weights_out[0]      = 0.0   (DC projected out)
+ *   weights_out[j*ny+k] = 1 / (lx[j] + ly[k] + ε),   otherwise
+ *
+ * Builds 2D Laplacian in-place (pass 1), then applies Poisson formula with
+ * SIMD (pass 2, i=1..N-1), then enforces weights_out[0]=0.0.
+ * Row-major: weights_out[j*ny + k].
+ *
+ * Usage:
+ *   double w[NX*NY];
+ *   cheap_weights_poisson_2d(NX, NY, 1e-8, w);
+ */
+static inline int cheap_weights_poisson_2d(int nx, int ny,
+                                            double eps,
+                                            double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || eps < 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            weights_out[j * ny + k] = lx + 4.0 * sy * sy;
+        }
+    }
+    const int N = nx * ny;
+    int i = 1;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d veps = _mm256_set1_pd(eps);
+        for (; i + 4 <= N; i += 4) {
+            __m256d vm  = _mm256_loadu_pd(weights_out + i);
+            __m256d den = _mm256_add_pd(vm, veps);
+            _mm256_storeu_pd(weights_out + i, _mm256_div_pd(vone, den));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t veps = vdupq_n_f64(eps);
+        for (; i + 2 <= N; i += 2) {
+            float64x2_t vm  = vld1q_f64(weights_out + i);
+            float64x2_t den = vaddq_f64(vm, veps);
+            vst1q_f64(weights_out + i, vdivq_f64(vone, den));
+        }
+    }
+#endif
+    for (; i < N; ++i)
+        weights_out[i] = 1.0 / (weights_out[i] + eps);
+    weights_out[0] = 0.0;
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, N);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_poisson_3d — 3D Poisson inverse-Laplacian weights.
+ *
+ *   weights_out[0]            = 0.0   (DC projected out)
+ *   weights_out[(j*ny+k)*nz+l] = 1 / (lx[j]+ly[k]+lz[l]+ε),   otherwise
+ *
+ * Row-major: (j*ny+k)*nz+l.
+ */
+static inline int cheap_weights_poisson_3d(int nx, int ny, int nz,
+                                            double eps,
+                                            double* restrict weights_out)
+{
+    if (nx < 2 || ny < 2 || nz < 2 || eps < 0.0 || !weights_out) return CHEAP_EINVAL;
+    for (int j = 0; j < nx; ++j) {
+        double sx = sin(M_PI * (double)j / (2.0 * (double)nx));
+        double lx = 4.0 * sx * sx;
+        for (int k = 0; k < ny; ++k) {
+            double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
+            double ly = 4.0 * sy * sy;
+            for (int l = 0; l < nz; ++l) {
+                double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
+                weights_out[(j * ny + k) * nz + l] = lx + ly + 4.0 * sz * sz;
+            }
+        }
+    }
+    const int N = nx * ny * nz;
+    int i = 1;
+#if defined(CHEAP_SIMD_AVX2)
+    {
+        __m256d vone = _mm256_set1_pd(1.0);
+        __m256d veps = _mm256_set1_pd(eps);
+        for (; i + 4 <= N; i += 4) {
+            __m256d vm  = _mm256_loadu_pd(weights_out + i);
+            __m256d den = _mm256_add_pd(vm, veps);
+            _mm256_storeu_pd(weights_out + i, _mm256_div_pd(vone, den));
+        }
+    }
+#elif defined(CHEAP_SIMD_NEON)
+    {
+        float64x2_t vone = vdupq_n_f64(1.0);
+        float64x2_t veps = vdupq_n_f64(eps);
+        for (; i + 2 <= N; i += 2) {
+            float64x2_t vm  = vld1q_f64(weights_out + i);
+            float64x2_t den = vaddq_f64(vm, veps);
+            vst1q_f64(weights_out + i, vdivq_f64(vone, den));
+        }
+    }
+#endif
+    for (; i < N; ++i)
+        weights_out[i] = 1.0 / (weights_out[i] + eps);
+    weights_out[0] = 0.0;
+    CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, N);
+    return CHEAP_OK;
+}
+
+/*
+ * cheap_weights_higher_order_tikhonov_deconv_ev — higher-order Tikhonov
+ * deconvolution weights.
+ *
+ *   weights_out[k] = ψ[k] / (ψ[k]² + α·μ[k]^p + ε)
+ *
+ * where ψ = psf_eigenvalues (DCT-II spectrum of PSF first column) and
+ * μ = lap_eigenvalues (Laplacian, or 1D Laplacian computed internally if
+ * lap_eigenvalues == NULL). α >= 0 is the regularization strength; p > 0
+ * is the penalty order (p=1: gradient penalty, p=2: biharmonic penalty).
+ * ε >= 0 prevents division by zero when both ψ[k] and μ[k] are near zero.
+ *
+ * Comparison to Wiener deconvolution (cheap_weights_wiener_deconv_ev):
+ * that formula uses a flat noise floor η in the denominator; this formula
+ * uses α·μ^p which penalizes rough solutions more than smooth ones.
+ *
+ * DC (μ[0]=0, pow(0,p)=0 by C99): w[0] = ψ[0]/(ψ[0]²+ε). The fmax
+ * floor CHEAP_EPS_DIV guards against ψ[0]=0 with ε=0.
+ *
+ * Works with both Flandrin and Laplacian bases for lap_eigenvalues.
+ * Scalar-only (pow in hot path).
+ *
+ * Usage:
+ *   double psf_eig[N], w[N];
+ *   cheap_toeplitz_eigenvalues(&ctx, psf_col, psf_eig);
+ *   cheap_weights_higher_order_tikhonov_deconv_ev(
+ *       N, psf_eig, NULL, 0.01, 2.0, 1e-8, w);  // biharmonic penalty
+ *   cheap_apply(&ctx, blurred, w, restored);
+ */
+static inline int cheap_weights_higher_order_tikhonov_deconv_ev(
+    int n,
+    const double* restrict psf_eigenvalues,
+    const double* restrict lap_eigenvalues,
+    double alpha, double p, double eps,
+    double* restrict weights_out)
+{
+    if (n < 2 || !psf_eigenvalues || alpha < 0.0 || p <= 0.0
+        || eps < 0.0 || !weights_out)
+        return CHEAP_EINVAL;
+    for (int i = 0; i < n; ++i)
+        if (!isfinite(psf_eigenvalues[i])) return CHEAP_EDOM;
+    if (lap_eigenvalues)
+        for (int i = 0; i < n; ++i)
+            if (!isfinite(lap_eigenvalues[i])) return CHEAP_EDOM;
+
+    double* lap_local = NULL;
+    const double* lap = lap_eigenvalues;
+    if (!lap) {
+        lap_local = (double*)malloc((size_t)n * sizeof(double));
+        if (!lap_local) return CHEAP_ENOMEM;
+        cheap__build_laplacian_flat(n, lap_local);
+        lap = lap_local;
+    }
+    for (int k = 0; k < n; ++k) {
+        double psi = psf_eigenvalues[k];
+        double lv  = lap[k];
+        double pen = (lv > CHEAP_EPS_LOG) ? alpha * pow(lv, p) : 0.0;
+        double den = psi * psi + pen + eps;
+        if (den < CHEAP_EPS_DIV) den = CHEAP_EPS_DIV;
+        weights_out[k] = psi / den;
+    }
+    free(lap_local);
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
 }

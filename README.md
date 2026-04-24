@@ -33,6 +33,12 @@ The choice of weight vector determines the operation:
 | Kernel PCA (hard/soft) | `I(k < K)` / soft variant | O(N log N) |
 | Mandelbrot multifractal | `abs(Gamma(H+it)/Gamma(1-H+it))` | O(N log N) |
 | RMT denoising | Marchenko-Pastur threshold | O(N log N) |
+| Matérn GRF covariance | `(κ² + μ[k])^(-ν)` | O(N) |
+| Anisotropic Matérn 2D/3D | `(κ_x²·lx + κ_y²·ly + ε)^(-ν)` | O(N) |
+| Heat propagator | `exp(-t · μ[k])` | O(N) |
+| Biharmonic inverse | `1 / (μ[k]² + ε)` | O(N) |
+| Poisson inverse | `1 / (μ[k] + ε)`, DC=0 | O(N) |
+| Higher-order Tikhonov deconv | `ψ[k] / (ψ[k]² + α·μ[k]^p + ε)` | O(N) |
 
 The eigenvalues `lambda[k]` come from Flandrin's wavelet variance formula for fractional Brownian motion, precomputed once during `cheap_init`. See [CHEAP.md](CHEAP.md) for the full mathematical treatment.
 
@@ -176,7 +182,13 @@ The API has three layers:
 - `cheap_weights_kpca_hard` / `cheap_weights_kpca_soft` — kernel PCA projection
 - `cheap_weights_mandelbrot` — Mandelbrot multifractal weights (complex Gamma ratio)
 - `cheap_weights_rmt_hard` / `cheap_weights_rmt_shrink` — RMT denoising (Marchenko-Pastur)
-- `cheap_weights_laplacian` — discrete Laplacian eigenvalues
+- `cheap_weights_laplacian` / `cheap_weights_laplacian_ev` — discrete Laplacian eigenvalues (_ev: flat buffer for passing to other `_ev` functions)
+- `cheap_weights_matern_ev` / `cheap_weights_matern_2d` / `cheap_weights_matern_3d` — Matérn covariance spectral weights for GRF sampling (SPDE formulation)
+- `cheap_weights_anisotropic_matern_2d` / `cheap_weights_anisotropic_matern_3d` — anisotropic Matérn with per-axis inverse length scales
+- `cheap_weights_heat_propagator_ev` / `cheap_weights_heat_propagator_2d` / `cheap_weights_heat_propagator_3d` — heat equation propagator kernel `exp(-t·μ)`
+- `cheap_weights_biharmonic_ev` / `cheap_weights_biharmonic_2d` / `cheap_weights_biharmonic_3d` — biharmonic inverse `1/(μ²+ε)` (thin-plate spline, SIMD)
+- `cheap_weights_poisson_ev` / `cheap_weights_poisson_2d` / `cheap_weights_poisson_3d` — Poisson inverse-Laplacian, DC projected out (SIMD)
+- `cheap_weights_higher_order_tikhonov_deconv_ev` — deconvolution with `α·μ^p` roughness penalty
 
 The C++ wrapper (`cheap.hpp`) provides RAII via `cheap::Context` and `cheap::RffContext`, with exception-based error handling and optional `std::span` overloads in C++20.
 

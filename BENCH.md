@@ -43,3 +43,28 @@ Run `./build/bench_cheap` and `./build/bench_cheap_scalar` to fill the table.
 | 262,144 (64³) | apply_krr_3d | — | — | — | — |
 
 Run `./build/bench_cheap` and `./build/bench_cheap_scalar` to fill the table.
+
+## Weight Constructors (v0.3.0)
+
+Weight constructors are pure O(N) spectral math — no FFTW plans, no ctx required. The DCT in `cheap_apply` at O(N log N) dominates total cost; weight construction is never the bottleneck.
+
+### ARM64 (ARMv8, `-O3 -march=native`, NEON enabled)
+
+| Constructor | N = 1,024 | N = 65,536 | N = 1M | SIMD |
+|---|---|---|---|---|
+| `laplacian_ev` | — | — | — | scalar (sin) |
+| `matern_ev` (κ=1, ν=1.5) | — | — | — | scalar (pow) |
+| `matern_2d` (32×32) | — | — | — | scalar (pow) |
+| `matern_3d` (16×16×4) | — | — | — | scalar (pow) |
+| `anisotropic_matern_2d` (32×32) | — | — | — | scalar (pow) |
+| `heat_propagator_ev` (t=0.1) | — | — | — | scalar (exp) |
+| `heat_propagator_2d` (32×32) | — | — | — | scalar (exp) |
+| `biharmonic_ev` | — | — | — | NEON 2×f64 |
+| `biharmonic_2d` (32×32) | — | — | — | NEON (pass 2) |
+| `poisson_ev` | — | — | — | NEON 2×f64 |
+| `poisson_2d` (32×32) | — | — | — | NEON (pass 2) |
+| `higher_order_tikhonov_deconv_ev` (p=2) | — | — | — | scalar (pow) |
+
+Run `./build/bench_cheap` to fill. All times in ms or cycles/element.
+
+**Expected speedup (biharmonic_ev, poisson_ev):** ≥ 1.8× over scalar on NEON (2×f64 per cycle vs 1×). AVX2 target: ≥ 3.5×.
