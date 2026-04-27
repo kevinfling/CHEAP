@@ -82,16 +82,17 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(cheap INTERFACE)
 target_include_directories(cheap INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 target_compile_options(cheap INTERFACE
-    -Wall -Wextra -Werror -pedantic -march=native)
+    -Wall -Wextra -pedantic -march=native)
 target_link_libraries(cheap INTERFACE FFTW3::fftw3 m)
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-enable_testing()
+include(CTest)   # defines BUILD_TESTING option (default ON); respects -DBUILD_TESTING=OFF
+if(BUILD_TESTING)
 
 add_executable(test_cheap tests/test_cheap.c)
 target_link_libraries(test_cheap PRIVATE cheap)
@@ -121,6 +122,8 @@ add_executable(test_cheap_weights tests/test_cheap_weights.c)
 target_link_libraries(test_cheap_weights PRIVATE cheap)
 add_test(NAME weights COMMAND test_cheap_weights)
 set_tests_properties(weights PROPERTIES TIMEOUT 60)
+
+endif() # BUILD_TESTING
 
 # ---------------------------------------------------------------------------
 # Benchmarks (built but NOT registered with CTest)
