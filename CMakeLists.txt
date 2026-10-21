@@ -157,6 +157,11 @@ target_link_libraries(test_embedding_diagnostics PRIVATE cheap)
 add_test(NAME embedding_diagnostics COMMAND test_embedding_diagnostics)
 set_tests_properties(embedding_diagnostics PROPERTIES TIMEOUT 120)
 
+add_executable(test_pcg_contract tests/test_pcg_contract.c)
+target_link_libraries(test_pcg_contract PRIVATE cheap)
+add_test(NAME pcg_contract COMMAND test_pcg_contract)
+set_tests_properties(pcg_contract PROPERTIES TIMEOUT 120)
+
 add_executable(test_pcg tests/test_pcg.c)
 target_link_libraries(test_pcg PRIVATE cheap)
 add_test(NAME pcg COMMAND test_pcg)
