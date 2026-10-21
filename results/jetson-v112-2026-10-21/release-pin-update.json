@@ -1,0 +1,31 @@
+{
+  "verified_at_utc": "2026-10-21T08:02:58.911494+00:00",
+  "release": "v1.1.2",
+  "measured_commit": "a6f8d0e12920107f89558ab484071f8c6655841d",
+  "current_pin": "a9a48e61eee91ee7182a013c32a4cae0f64f6da3",
+  "updated_tag_object": "2636fcc71e2219021d6a2a7032d6ba852c0effa9",
+  "changed_paths": [
+    "README.md",
+    "benchmarks/README.md",
+    "benchmarks/results/jetson_orin_nano_c2c.csv",
+    "benchmarks/results/jetson_orin_nano_r2r_dct.csv",
+    "docs/core-validation.md",
+    "docs/r2r.md",
+    "docs/real-dft.md"
+  ],
+  "identical_git_objects": {
+    "include": "7c7f64298aeaf3cc91862db295760202a2d79335",
+    "src": "de558da2bcc47ac52b823818347aa43cbfc0598f",
+    "tests": "28a0e78978b196a2416364670bd709679c1d58c2",
+    "CMakeLists.txt": "e7adf2acb261fe573b9628b76f7001051da1a9f0"
+  },
+  "verification": "Only Markdown and benchmark-result CSV files changed; numerical headers, source, tests and build configuration are identical.",
+  "cmake_configure_verified": true,
+  "cmake_configure_command": [
+    "cmake",
+    "-S",
+    ".",
+    "-B",
+    "build-jetson-v112-NOTORIOUS"
+  ]
+}

@@ -1,325 +1,131 @@
 # CHEAP
 
-**Circulant Hessian Efficient Algorithm Package:** a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices. Supports 1D, 2D, and 3D grids via separable DCT diagonalization.
+CHEAP (Circulant Hessian Efficient Algorithm Package) is a C99 toolkit for fast structured linear operators on regular grids, with a C++17 wrapper. Its core applies a chosen spectral multiplier using DCT-II/III transforms in O(N log N) work and O(N) storage. Companion headers provide original Toeplitz products, residual-controlled iterative solves, covariance sampling, and dense entropic transport.
 
-CHEAP turns cubic-time kernel methods into fast spectral operations by exploiting the fact that stationary covariance matrices (Toeplitz) diagonalize in the DCT-II basis. One forward DCT, one pointwise multiply, one inverse DCT: that's the entire algorithm for kernel regression, optimal transport, Gaussian sampling, control, and fractional calculus.
+This is a research branch with tested numerical components and several legacy interfaces. The useful idea is reusable transforms and explicit operator contracts. The earlier claim that a DCT directly solves arbitrary Toeplitz or finite-grid fractional Brownian covariance systems was too broad.
 
-On N=65,536 problems, CHEAP delivers 400-1000x speedups over Cholesky/LAPACK baselines using O(N) memory.
+| Start here | Contents |
+| --- | --- |
+| [README.md](README.md) | Build, repository map, lessons learned, strengths and limitations |
+| [API.md](API.md) | Operator definitions, lifecycle, numerical contracts and API selection |
+| [BENCH.md](BENCH.md) | Recorded evidence, raw data index, reproduction and research gaps |
 
-## How It Works
+## Choose the operation
 
-Every algorithm in CHEAP reduces to the same three-step primitive:
+| Goal | Use | What the result means |
+| --- | --- | --- |
+| Apply a known DCT filter or discrete PDE operator | `cheap.h`, `cheap_weights_verified.h` | The specified discrete operator, up to floating-point error |
+| Multiply by a finite symmetric Toeplitz matrix | `cheap_toeplitz_operator.h` | The original matrix-vector product through padded FFT convolution |
+| Solve an original SPD system | `cheap_pcg.h` with the original operator callback | A solve accepted after a fresh original-system residual check; DCT preconditioning is optional |
+| Draw a stationary 1D Gaussian with specified covariance lags | `cheap_circulant_sampler.h` | Covariance-faithful only when the embedding passes its PSD check, subject to the chosen tolerance |
+| Solve entropic OT for an explicit cost matrix | `cheap_transport.h` | Dense log-domain Sinkhorn, O(N²) per sweep |
 
+A Toeplitz product is not a solve. A DCT surrogate solve is exact for its chosen surrogate; its residual on another matrix can still be large. PCG costs depend on iteration count, and sampling costs depend on the accepted embedding length.
+
+## Build and try it
+
+The default backend is FFTW3. Install its development package (`libfftw3-dev` on Debian/Ubuntu), a C/C++ compiler and CMake. CMake searches locally first and downloads FFTW 3.3.10 if needed; that fallback requires network access. C++ targets need C++17 and can be disabled with `-DCHEAP_BUILD_CPP=OFF`.
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel 2
+ctest --test-dir build --output-on-failure
+./build/poisson_solver_2d
+./build/toeplitz_solve
 ```
-output = iDCT( DCT(input) .* weights )
-```
 
-The choice of weight vector determines the operation:
+The example named `toeplitz_solve` demonstrates a DCT surrogate. For the original Toeplitz equation, see the complete [PCG example](API.md#solve-an-original-toeplitz-system).
 
-| Operation | Weight `w[k]` | Complexity |
-|-----------|---------------|------------|
-| Kernel ridge regression | `1 / (lambda[k] + reg)` | O(N log N) |
-| Gaussian reparameterization | `sqrt(lambda[k])` | O(N log N) |
-| Sinkhorn optimal transport | `exp(-lambda[k] / eps)` | O(N log N) / iter |
-| LQR / Tikhonov control | `1 / (lambda[k] + R)` | O(N log N) |
-| Fractional differentiation | `(2 sin(w_k/2))^d` | O(N log N) |
-| Toeplitz matvec / solve | `DCT(first_col)[k]` | O(N log N) |
-| Kalman prediction | `P[k] + lambda[k]` | O(N) |
-| Wiener filter | `lk / (lk + sigma^2)` | O(N log N) |
-| Wiener deconvolution | `lk_psf / (lk_psf² + noise_power)` | O(N log N) |
-| 2D/3D Laplacian | sum of `4sin²` terms | O(N log N) |
-| 2D/3D fractional Laplacian | `(laplacian)^α` | O(N log N) |
-| Spectral normalization | `1 / sqrt(lk + eps)` | O(N log N) |
-| Kernel PCA (hard/soft) | `I(k < K)` / soft variant | O(N log N) |
-| Mandelbrot multifractal | `abs(Gamma(H+it)/Gamma(1-H+it))` | O(N log N) |
-| RMT denoising | Marchenko-Pastur threshold | O(N log N) |
-| Matérn GRF covariance | `(κ² + μ[k])^(-ν)` | O(N) |
-| Anisotropic Matérn 2D/3D | `(κ_x²·lx + κ_y²·ly + ε)^(-ν)` | O(N) |
-| Heat propagator | `exp(-t · μ[k])` | O(N) |
-| Biharmonic inverse | `1 / (μ[k]² + ε)` | O(N) |
-| Poisson inverse | `1 / (μ[k] + ε)`, DC=0 | O(N) |
-| Higher-order Tikhonov deconv | `ψ[k] / (ψ[k]² + α·μ[k]^p + ε)` | O(N) |
-
-The eigenvalues `lambda[k]` come from Flandrin's wavelet variance formula for fractional Brownian motion, precomputed once during `cheap_init`. See [CHEAP.md](CHEAP.md) for the full mathematical treatment.
-
-## Quick Start
-
-### C API
+Save this standalone example as `heat.c`. It smooths initialized data with the heat semigroup of the unit-spacing discrete Neumann Laplacian. The supplied weights determine the operator; this example does not use the context's default covariance spectrum.
 
 ```c
+#include <stdio.h>
 #include "cheap.h"
 
 int main(void) {
-    cheap_ctx ctx;
-    cheap_init(&ctx, 4096, 0.7);  /* N=4096, Hurst exponent H=0.7 */
-
-    /* Kernel ridge regression: solve (K + lambda*I)^{-1} y in O(N log N) */
-    double w[4096], y[4096], alpha[4096];
-    for (int k = 0; k < 4096; ++k)
-        w[k] = 1.0 / (ctx.lambda[k] + 1e-3);
-
-    cheap_apply(&ctx, y, w, alpha);  /* done. */
-
+    enum { N = 32 };
+    cheap_ctx ctx = {0};
+    double input[N] = {0}, weights[N], output[N];
+    input[N / 2] = 1.0;
+    int rc = cheap_init(&ctx, N, 0.5);
+    if (rc == CHEAP_OK)
+        rc = cheap_weights_laplacian(N, weights);
+    if (rc == CHEAP_OK) {
+        for (int k = 0; k < N; ++k)
+            weights[k] = exp(-0.25 * weights[k]);
+        rc = cheap_apply(&ctx, input, weights, output);
+    }
+    if (rc == CHEAP_OK) printf("center = %.9g\n", output[N / 2]);
     cheap_destroy(&ctx);
+    return rc == CHEAP_OK ? 0 : 1;
 }
 ```
 
-### 2D Poisson solver (C)
-
-```c
-cheap_ctx_2d ctx;
-cheap_init_2d(&ctx, 128, 128, 0.5, 0.5);
-
-double f[128*128], phi[128*128], w[128*128];
-/* ... fill RHS f ... */
-
-cheap_weights_laplacian_2d(128, 128, w);
-w[0] = 1.0;  /* DC regularization */
-
-cheap_forward_2d(&ctx, f);
-for (int i = 0; i < 128*128; ++i) ctx.workspace[i] /= w[i];
-cheap_inverse_2d(&ctx, phi);  /* solves -Δφ = f */
-
-cheap_destroy_2d(&ctx);
+```sh
+cc -std=c99 -O2 -Wall -Wextra -pedantic -Iinclude heat.c -lfftw3 -lm -o heat
+./heat
 ```
 
-### C++ API
+Applications can include the headers directly. In this repository, CMake exposes `cheap` and `cheap_cpp` interface targets. There is currently no install/export package configuration.
 
-```cpp
-#include "cheap.hpp"
+An alternative backend is selected at configure time:
 
-int main() {
-    cheap::Context ctx(4096, 0.7);
-
-    std::vector<double> y(4096), weights(4096);
-    for (int k = 0; k < 4096; ++k)
-        weights[k] = 1.0 / (ctx.lambda()[k] + 1e-3);
-
-    auto alpha = ctx.apply(y.data(), weights.data());  /* returns std::vector */
-}
+```sh
+cmake -S . -B build-notorious -DCMAKE_BUILD_TYPE=Debug \
+  -DCHEAP_FFT_BACKEND=NOTORIOUS
+cmake --build build-notorious --parallel 2
+ctest --test-dir build-notorious --output-on-failure
 ```
 
-## Examples
+CMake fetches Notorious-FFT v1.1.2 at pinned commit `a9a48e61eee91ee7182a013c32a4cae0f64f6da3` and compiles its implementation once. This needs network access unless the dependency is supplied locally. Backend selection is not available at runtime.
 
-### Entropic Optimal Transport (Sinkhorn)
+## Repository map
 
-Transport mass between two distributions in O(N log N) per iteration, with max-log stabilization for numerical safety:
+| Path | Purpose and first place to look |
+| --- | --- |
+| [`include/cheap.h`](include/cheap.h) | Main header: contexts, DCT application, legacy weights, spectral scaling and random Fourier features |
+| [`include/cheap.hpp`](include/cheap.hpp) | Move-only RAII wrappers for 1D/2D/3D contexts and RFF |
+| [`include/cheap_weights_verified.h`](include/cheap_weights_verified.h) | Explicit covariance versus sampling weights, anisotropy, resolvent, wave and Wiener constructors |
+| [`include/cheap_toeplitz_operator.h`](include/cheap_toeplitz_operator.h), [`include/cheap_pcg.h`](include/cheap_pcg.h) | Original Toeplitz operator and iterative solver |
+| [`include/cheap_circulant_sampler.h`](include/cheap_circulant_sampler.h), [`include/cheap_spectral_diagnostics.h`](include/cheap_spectral_diagnostics.h) | PSD-checked stationary sampling and surrogate diagnostics |
+| [`include/cheap_transport.h`](include/cheap_transport.h), [`include/cheap_sinkhorn_divergence.h`](include/cheap_sinkhorn_divergence.h), [`include/cheap_gumbel_transport.h`](include/cheap_gumbel_transport.h) | Dense transport and its debiased/perturbed variants |
+| [`include/cheap_toeplitz_dct_diagonal.h`](include/cheap_toeplitz_dct_diagonal.h) | Standalone O(N²) projection reference; main header also has an FFT implementation |
+| [`src/`](src/), [`include/cheap_notorious_nd.h`](include/cheap_notorious_nd.h) | Notorious implementation translation unit and ND compatibility adapter |
+| [`examples/c/`](examples/c/), [`examples/cpp/`](examples/cpp/) | Matching examples; interpretation follows the selected operator, even when filenames use application names |
+| [`tests/`](tests/) | C/C++ correctness, independent references and Python harness validators |
+| [`bench/`](bench/) | Evidence harnesses and sequential sweep runners; use for accuracy-qualified comparisons |
+| [`benchmarks/`](benchmarks/) | Legacy microbenchmarks; some Release targets use fast-math and cannot establish input-validation behavior |
+| [`experiments/`](experiments/) | Exploratory NumPy/SciPy fBm comparisons, outside CTest |
+| [`experimental/timberwolf.h`](experimental/timberwolf.h) | Separate C11 application prototype requiring CHEAPDAN; outside the supported build/test surface |
+| [`results/`](results/) | Recorded CSVs, plans, logs, hashes and platform metadata; indexed in BENCH.md |
+| [`CMakeLists.txt`](CMakeLists.txt), [`cmake/`](cmake/), [CI workflow](.github/workflows/dual-backend-correctness.yml) | Targets, dependency discovery and dual-backend correctness matrix |
 
-```c
-cheap_ctx ctx;
-cheap_init(&ctx, 1024, 0.7);
+## Lessons learned
 
-double a[1024], b[1024];  /* source and target marginals (equal mass) */
-double f[1024], g[1024];  /* dual potentials (output) */
+1. **Start with the matrix and its boundary conditions.** The DCT exactly diagonalizes the specified reflected-boundary discrete Laplacian and operators built from it. Generic Toeplitz covariances and nonstationary fBm levels need approximation or iterative correction. The default Flandrin-inspired spectrum is a model, not an exact finite-grid fBm eigendecomposition.
+2. **Measure error in the original problem.** Positive surrogate weights establish an SPD surrogate, not accuracy or positive definiteness of the original matrix. A small surrogate or transformed residual cannot replace `||b-Ax||`. A sampler needs covariance validation, not just finite outputs.
+3. **Covariance and sampling weights differ.** Sampling uses the square root of a covariance spectrum. Legacy Matérn helpers conflate the raw exponent with conventional smoothness, and their convenience samplers apply covariance weights directly. Use the additive corrected constructors; see [migration notes](API.md#legacy-names-and-migration).
+4. **A spectral exponential is not an entrywise Gibbs kernel.** Legacy `cheap_sinkhorn` scales a spectral operator. That operator need not be entrywise positive, so arbitrary-cost entropic OT claims do not follow. The explicit-cost transport header provides a separate dense solver.
+5. **Fewer iterations do not guarantee less time.** An older backend's direct cosine-sum fallback overwhelmed preconditioning gains at awkward sizes. Isolated timings and selected plans identified the issue; the v1.1.2 follow-up removed that measured cliff. Setup, first call, reuse and backend paths all matter.
+6. **Compare equal tasks and retain failures.** Recent AR(1) PCG comparisons check every original-system residual. They still use one matrix family and fixed RHS, and omit a structure-specific direct baseline. Established transform projections and preconditioning theory do not become novel because they share one implementation.
 
-int rc = cheap_sinkhorn(&ctx, a, b,
-                        /*eps=*/0.01, /*max_iter=*/200, /*tol=*/1e-8,
-                        f, g);
-/* rc == CHEAP_OK on convergence */
+## Strengths and current limits
 
-cheap_destroy(&ctx);
-```
+CHEAP is useful when a regular-grid DCT operator is the model you want, transforms and spectra can be reused, or a spectral approximation is an effective preconditioner for a separately supplied SPD operator. It supports rectangular 2D and noncubic 3D transforms, flat spectral arrays, AVX2/NEON pointwise kernels, and cached plans. The exact Toeplitz apply, PCG loop and circulant draw reuse allocated scratch.
 
-### Gaussian Process Sampling
+The recorded Jetson follow-up found lower DCT-PCG warm medians in all 36 AR(1) comparisons. At N=4096 and correlation 0.99, FFTW3 CG took 193.206 ms versus 2.623 ms for DCT-PCG at the same residual target. This is a single-session comparison against unpreconditioned CG, with setup reported separately. [BENCH.md](BENCH.md) preserves context, older counterexamples and raw evidence.
 
-Sample from a GP posterior with fBm covariance in O(N log N) — no Cholesky required:
+- **Model scope:** DCT grid boundaries and separable/tensor models do not represent arbitrary scattered data, nonseparable covariance or general PDE boundaries. Exact Toeplitz multiplication and PSD circulant sampling are currently 1D; 2D/3D Toeplitz constructors remain legacy surrogates.
+- **Numerics:** validation varies by API. Legacy fast paths may skip checks, and `cheap_apply` does not validate every supplied weight or output. Callers must supply finite valid parameters and weights. No universal approximation rate, mesh-independent PCG convergence or state-of-the-art claim is established.
+- **Lifecycle:** initialization/planning can be expensive (`FFTW_PATIENT` for core DCT contexts). Contexts own mutable scratch, cannot be copied, and cannot be shared concurrently. Serialize backend planning/destruction as required by the backend.
+- **Portability:** native Linux GCC/Clang on AArch64 and x86 are the intended build environment. CMake adds `-march=native` and GNU-style flags; this is not a portable binary or MSVC build configuration. `cheap_rdtsc` returns architecture-dependent ticks, not a universal CPU-cycle count.
+- **Compatibility:** the header reports `0.3.0-tensor-weights`, while CMake still declares `0.2.0`. Legacy names and some source comments overstate mathematical interpretations. API.md describes this branch without silently changing numerical behavior.
+- **Evidence:** optimized timings, sanitizer validation and Python experiments are different evidence. Backend parity at all sizes, full covariance recovery, strong direct/structured baselines and broad independent reproduction remain open.
 
-```c
-cheap_ctx ctx;
-cheap_init(&ctx, 8192, 0.7);
+Next work should prioritize the missing direct baseline and independent accuracy checks, legacy API migration, consistent versioning, and fair setup-inclusive multi-RHS experiments. fBm research needs a native increment-domain competitor, broader parameter/RHS sweeps and a completed prior-art review before publication claims.
 
-double eps[8192], sample[8192];
-/* fill eps with standard normal draws */
+## Documentation archive and license
 
-cheap_apply(&ctx, eps, ctx.sqrt_lambda, sample);
-/* sample ~ N(0, K) where K is the fBm covariance */
+Documentation was consolidated on 2026-10-21 into these three guides. Superseded manuscripts, audits, tables, plans and per-run narratives were copied with their original paths into local `old/`, with a SHA-256 manifest, before removal. Original versions of rewritten guides were backed up too. `old/` is excluded through `.git/info/exclude`, so this archive stays on this checkout; tracked originals remain in Git history. Raw evidence and executable source retain their existing paths.
 
-cheap_destroy(&ctx);
-```
-
-### Toeplitz System Solve
-
-Solve a regularized Toeplitz system `(T + lambda*I)x = y` for any symmetric Toeplitz matrix:
-
-```c
-cheap_ctx ctx;
-cheap_init(&ctx, 2048, 0.5);
-
-double t[2048];   /* first column of Toeplitz matrix */
-double lam[2048]; /* eigenvalues (output) */
-cheap_toeplitz_eigenvalues(&ctx, t, lam);
-
-double y[2048], x[2048];
-cheap_toeplitz_solve_precomp(&ctx, lam, y, /*reg=*/1e-4, x);
-/* x = (T + 1e-4 * I)^{-1} y */
-
-cheap_destroy(&ctx);
-```
-
-More examples in [`examples/`](examples/): GP regression, optimal transport, LQR/MPC control, fractional calculus, Poisson solver (2D/3D), Navier-Stokes dissipation (2D/3D), online kernel filtering, Wiener denoising (2D), RMT denoising, GP regression (2D), Toeplitz solve (2D).
-
-## API Overview
-
-The API has three layers:
-
-**1. Context lifecycle** — allocate once, reuse for all operations:
-- `cheap_init(ctx, n, H)` / `cheap_destroy(ctx)`
-
-**2. Core spectral primitives** — the building blocks:
-- `cheap_forward` / `cheap_inverse` — raw DCT-II and iDCT-III
-- `cheap_apply` — the universal `DCT -> multiply -> iDCT` primitive
-
-**3. Algorithms** — built on the primitives:
-- `cheap_sinkhorn` — entropic optimal transport
-- `cheap_toeplitz_eigenvalues` / `cheap_toeplitz_solve_precomp` — generic Toeplitz operations
-- `cheap_rff_init` / `cheap_rff_map` — random Fourier features for kernel approximation
-
-**4. Spectral weight constructors** — compute weight vectors for `cheap_apply`:
-- `cheap_weights_fractional` — fractional integration/differentiation
-- `cheap_weights_wiener` / `cheap_weights_wiener_ev` — Wiener filter (Laplacian or custom eigenvalues)
-- `cheap_weights_wiener_deconv_ev` — Wiener deconvolution for circulant PSF (blur removal)
-- `cheap_weights_specnorm` / `cheap_weights_specnorm_ev` — spectral normalization / whitening
-- `cheap_weights_kpca_hard` / `cheap_weights_kpca_soft` — kernel PCA projection
-- `cheap_weights_mandelbrot` — Mandelbrot multifractal weights (complex Gamma ratio)
-- `cheap_weights_rmt_hard` / `cheap_weights_rmt_shrink` — RMT denoising (Marchenko-Pastur)
-- `cheap_weights_laplacian` / `cheap_weights_laplacian_ev` — discrete Laplacian eigenvalues (_ev: flat buffer for passing to other `_ev` functions)
-- `cheap_weights_matern_ev` / `cheap_weights_matern_2d` / `cheap_weights_matern_3d` — Matérn covariance spectral weights for GRF sampling (SPDE formulation)
-- `cheap_weights_anisotropic_matern_2d` / `cheap_weights_anisotropic_matern_3d` — anisotropic Matérn with per-axis inverse length scales
-- `cheap_weights_heat_propagator_ev` / `cheap_weights_heat_propagator_2d` / `cheap_weights_heat_propagator_3d` — heat equation propagator kernel `exp(-t·μ)`
-- `cheap_weights_biharmonic_ev` / `cheap_weights_biharmonic_2d` / `cheap_weights_biharmonic_3d` — biharmonic inverse `1/(μ²+ε)` (thin-plate spline, SIMD)
-- `cheap_weights_poisson_ev` / `cheap_weights_poisson_2d` / `cheap_weights_poisson_3d` — Poisson inverse-Laplacian, DC projected out (SIMD)
-- `cheap_weights_higher_order_tikhonov_deconv_ev` — deconvolution with `α·μ^p` roughness penalty
-
-**Convenience samplers** (no heap allocation, reuse ctx→workspace as scratch):
-- `cheap_sample_matern_2d(ctx, white_noise, kappa, nu, out)` — one-call 2D Matérn GRF sample
-- `cheap_sample_matern_3d(ctx, white_noise, kappa, nu, out)` — one-call 3D Matérn GRF sample
-
-```c
-/* Sample a 2D Matérn-1.5 GRF on a 128×128 grid */
-cheap_ctx_2d ctx;
-cheap_init_2d(&ctx, 128, 128, 0.7, 0.7);
-
-double noise[128*128], grf[128*128];
-/* fill noise[] with N(0,1) draws from your RNG */
-cheap_sample_matern_2d(&ctx, noise, 1.0 /*kappa*/, 1.5 /*nu*/, grf);
-
-cheap_destroy_2d(&ctx);
-```
-
-The C++ wrapper (`cheap.hpp`) provides RAII via `cheap::Context` and `cheap::RffContext`, with exception-based error handling and optional `std::span` overloads in C++20.
-
-Full documentation: [API.md](API.md)
-
-## Building
-
-### Header-only (no build system)
-
-```bash
-gcc -std=c99 -O3 -march=native myapp.c -o myapp -lfftw3 -lm
-```
-
-### CMake
-
-```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make
-ctest -V    # run tests
-```
-
-Build types: `Release` (`-O3`), `Debug` (`-O0 -g`), `Asan` (`-fsanitize=address,undefined`).
-
-C++ targets are built by default. Disable with `-DCHEAP_BUILD_CPP=OFF`.
-
-### Dependencies
-
-- **FFTW3** — the only external dependency
-  - Debian/Ubuntu: `sudo apt install libfftw3-dev`
-  - macOS: `brew install fftw`
-  - CMake will auto-download FFTW 3.3.10 if not found locally
-
-### Platform Support
-
-| Platform | Status |
-|----------|--------|
-| x86 / x86_64 | Supported (auto-vectorized with `-march=native`) |
-| ARM64 / AArch64 | Supported (primary dev target, auto-vectorized) |
-| Any C99 target | Portable (no platform-specific code in hot paths) |
-
-## Benchmarks
-
-### ARM64 (ARMv8 rev 1 @ ~1.5 GHz, GCC 11.4.0, `-O3 -march=native`)
-
-| Algorithm | N=1,024 | N=8,192 | N=65,536 | Scaling |
-|-----------|---------|---------|----------|---------|
-| KRR solve | 0.022 ms | 0.210 ms | 2.94 ms | O(N log N) |
-| Sinkhorn (50 iters) | 0.196 ms | 1.67 ms | 18.40 ms | O(N log N) |
-| Reparameterization | 0.022 ms | 0.212 ms | 2.84 ms | O(N log N) |
-| Toeplitz matvec | 0.022 ms | 0.210 ms | 2.94 ms | O(N log N) |
-| RFF map (D=256) | 0.016 ms | — | — | O(D) |
-
-### Statistical Benchmarks (30 trials, FFTW_PATIENT)
-
-| Algorithm | N | Mean (ms) | CV% | Status |
-|-----------|---|-----------|-----|--------|
-| krr_solve | 65,536 | 5.279 | 0.08% | STABLE |
-| reparam | 65,536 | 5.363 | 0.11% | STABLE |
-| sinkhorn_50 | 65,536 | 16.613 | 0.46% | STABLE |
-| toeplitz_matvec | 65,536 | 4.924 | 0.06% | STABLE |
-
-All CV < 0.5%, 95% CI within 0.2% of mean.
-
-Run benchmarks:
-```bash
-./build/bench_cheap          # quick benchmarks
-./build/bench_cheap_stats    # statistical benchmarks (30 trials)
-```
-
-### Complexity vs. Standard Methods
-
-| Problem | Standard | CHEAP | Memory |
-|---------|----------|-------|--------|
-| Kernel regression | O(N^3) | O(N log N) | O(N) |
-| Toeplitz solve | O(N^3) | O(N log N) | O(N) |
-| GP sampling | O(N^3) | O(N log N) | O(N) |
-| KLMS update | O(n) growing | O(D) fixed | O(D) |
-
-## File Structure
-
-```
-include/
-  cheap.h        — C99 header (~2200 lines, entire implementation)
-  cheap.hpp      — C++17 RAII wrapper (1D + 2D + 3D)
-tests/
-  test_cheap.c   — C test suite (1D)
-  test_cheap_2d.c — 2D correctness + SIMD equivalence
-  test_cheap_3d.c — 3D correctness
-  test_cheap_cpp.cpp — C++ wrapper tests
-benchmarks/
-  bench_cheap.c  — quick benchmarks (1D + 2D + 3D)
-  bench_cheap_cpp.cpp
-examples/
-  c/             — C99 examples
-    gp_regression.c, optimal_transport.c, lqr_mpc.c,
-    fractional_diff.c, poisson_solver.c, ns_dissipation.c,
-    toeplitz_solve.c, online_filter.c, wiener_denoise.c,
-    rmt_denoise.c,
-    poisson_solver_2d.c, poisson_solver_3d.c,
-    wiener_denoise_2d.c,
-    ns_dissipation_2d.c, ns_dissipation_3d.c,
-    gp_regression_2d.c, toeplitz_solve_2d.c
-  cpp/           — C++17 equivalents
-    (same names as c/ with .cpp extension)
-```
-
-## When to Use CHEAP
-
-**CHEAP excels at:** 1D regular grids, stationary kernels (Matern, RBF, fBm), repeated solves with the same (N, H), large N (tested to N > 10^6).
-
-**CHEAP is not for:** irregular/scattered data, non-stationary kernels, high-dimensional grids (use tensor products or RFF instead).
-
-See [CHEAP.md](CHEAP.md) for the full mathematical framework, proofs, and an honest discussion of the accuracy-efficiency Pareto frontier.
-
-## License
-
-[MIT](LICENSE)
+CHEAP is [MIT licensed](LICENSE). FFT backend dependencies carry their own licenses; consult the dependency distribution when redistributing a linked application.

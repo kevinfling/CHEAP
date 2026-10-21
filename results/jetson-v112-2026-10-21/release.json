@@ -1,0 +1,8 @@
+{
+  "commit": "a6f8d0e12920107f89558ab484071f8c6655841d\n",
+  "tag_object": "object a6f8d0e12920107f89558ab484071f8c6655841d\ntype commit\ntag v1.1.2\ntagger adri4n <yo@adri4n.net> 1792568072 -0700\n\nv1.1.2\n",
+  "commit_metadata": "commit a6f8d0e12920107f89558ab484071f8c6655841d\nAuthor:     adri4n <yo@adri4n.net>\nAuthorDate: Wed Oct 21 00:32:53 2026 -0700\nCommit:     adri4n <yo@adri4n.net>\nCommitDate: Wed Oct 21 00:33:29 2026 -0700\n\n    Fast arbitrary-length DCT-II/III for v1.1.2\n    \n    Replace the quadratic NPO2 DCT-II/III fallback with an FFT-backed\n    O(N log N) embedding. Even lengths pack through an N/2 real DFT;\n    odd lengths use an N-point FFT. FFTW unnormalized REDFT10/01\n    scaling is unchanged, and a length-257 DCT stays length 257.\n    \n    Add conjugate-pair codelets (7, 11, 13, 17, 19, 43) plus CT\n    leaves 9/15/21/27. The planner peels the largest codelet factor\n    so 513 is 27\u00d719 and packed 129/258 go through 43. Mixed-radix\n    3/5/7 columns stay SIMD.\n",
+  "release_tag_object_sha": "931561b13818dada8708d4cc0bc42cbaddd28dcd",
+  "release": "v1.1.2",
+  "previous_commit": "681ae621f51731f84cded6872dcb1f1082105168"
+}

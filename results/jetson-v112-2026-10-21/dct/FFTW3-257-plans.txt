@@ -1,0 +1,37 @@
+backend=FFTW3 n=257 rho=0.98999999999999999 planner=FFTW_ESTIMATE
+DCT-II/REDFT10: (redft10e-r2hc-257
+  (r2hc-dht-257
+    (dht-rader-257/256/is=1/os=1
+      (rdft-ct-dit/16
+        (hc2hc-direct-16/8 "hf2_16"
+          (rdft-r2hc-direct-r2c-16 "r2cf_16")
+          (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+        (rdft-r2hc-directbuf/18-r2c-16-x16 "r2cf_16"))
+      (rdft-ct-dit/16
+        (hc2hc-direct-16/8 "hf2_16"
+          (rdft-r2hc-direct-r2c-16 "r2cf_16")
+          (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+        (rdft-r2hc-directbuf/18-r2c-16-x16 "r2cf_16"))
+      (rdft-ct-dit/16
+        (hc2hc-direct-16/8 "hf2_16"
+          (rdft-r2hc-direct-r2c-16 "r2cf_16")
+          (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+        (rdft-r2hc-directbuf/18-r2c-16-x16 "r2cf_16")))))
+DCT-III/REDFT01: (redft01e-r2hc-257
+  (r2hc-dht-257
+    (dht-rader-257/256/is=1/os=1
+      (rdft-ct-dit/16
+        (hc2hc-direct-16/8 "hf2_16"
+          (rdft-r2hc-direct-r2c-16 "r2cf_16")
+          (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+        (rdft-r2hc-directbuf/18-r2c-16-x16 "r2cf_16"))
+      (rdft-ct-dit/16
+        (hc2hc-direct-16/8 "hf2_16"
+          (rdft-r2hc-direct-r2c-16 "r2cf_16")
+          (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+        (rdft-r2hc-directbuf/18-r2c-16-x16 "r2cf_16"))
+      (rdft-ct-dit/16
+        (hc2hc-direct-16/8 "hf2_16"
+          (rdft-r2hc-direct-r2c-16 "r2cf_16")
+          (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+        (rdft-r2hc-directbuf/18-r2c-16-x16 "r2cf_16")))))

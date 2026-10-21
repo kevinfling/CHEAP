@@ -1,0 +1,41 @@
+name: CHEAP dual-backend correctness
+on:
+  push:
+    branches: [research/spectral-correctness-paper]
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: cheap-dual-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [FFTW3, NOTORIOUS]
+        mode: [Debug, Asan, Ubsan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools and reference FFTW
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libfftw3-dev
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCHEAP_FFT_BACKEND=${{ matrix.backend }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.mode }} \
+            -DCHEAP_BUILD_CPP=ON \
+            -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure --timeout 180

@@ -1,0 +1,83 @@
+{
+  "utc": "2026-10-21T07:40:39.673631+00:00",
+  "commands": [
+    {
+      "command": [
+        "uname",
+        "-a"
+      ],
+      "exit_status": 0,
+      "stdout": "Linux elroy 5.15.148-tegra #1 SMP PREEMPT Tue Jan 7 17:14:38 PST 2025 aarch64 aarch64 aarch64 GNU/Linux\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "lscpu"
+      ],
+      "exit_status": 0,
+      "stdout": "Architecture:                       aarch64\nCPU op-mode(s):                     32-bit, 64-bit\nByte Order:                         Little Endian\nCPU(s):                             6\nOn-line CPU(s) list:                0-5\nVendor ID:                          ARM\nModel name:                         Cortex-A78AE\nModel:                              1\nThread(s) per core:                 1\nCore(s) per cluster:                3\nSocket(s):                          -\nCluster(s):                         2\nStepping:                           r0p1\nCPU max MHz:                        1728.0000\nCPU min MHz:                        115.2000\nBogoMIPS:                           62.50\nFlags:                              fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp uscat ilrcpc flagm paca pacg\nL1d cache:                          384 KiB (6 instances)\nL1i cache:                          384 KiB (6 instances)\nL2 cache:                           1.5 MiB (6 instances)\nL3 cache:                           4 MiB (2 instances)\nNUMA node(s):                       1\nNUMA node0 CPU(s):                  0-5\nVulnerability Gather data sampling: Not affected\nVulnerability Itlb multihit:        Not affected\nVulnerability L1tf:                 Not affected\nVulnerability Mds:                  Not affected\nVulnerability Meltdown:             Not affected\nVulnerability Mmio stale data:      Not affected\nVulnerability Retbleed:             Not affected\nVulnerability Spec rstack overflow: Not affected\nVulnerability Spec store bypass:    Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:           Mitigation; __user pointer sanitization\nVulnerability Spectre v2:           Mitigation; CSV2, but not BHB\nVulnerability Srbds:                Not affected\nVulnerability Tsx async abort:      Not affected\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/usr/bin/gcc",
+        "--version"
+      ],
+      "exit_status": 0,
+      "stdout": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "cmake",
+        "--version"
+      ],
+      "exit_status": 0,
+      "stdout": "cmake version 3.22.1\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "pkg-config",
+        "--modversion",
+        "fftw3"
+      ],
+      "exit_status": 0,
+      "stdout": "3.3.8\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "/home/damus/Projects/CHEAP",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exit_status": 0,
+      "stdout": "fd39c43cd06f006e28578c7826ef6f60ffa5916f\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "/home/damus/Projects/CHEAP",
+        "status",
+        "--short"
+      ],
+      "exit_status": 0,
+      "stdout": " M CMakeLists.txt\n M bench/bench_preconditioner.c\n M bench/run_preconditioner_sweep.py\n M tests/test_bench_preconditioner.py\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "cat",
+        "/etc/nv_tegra_release"
+      ],
+      "exit_status": 0,
+      "stdout": "# R36 (release), REVISION: 4.4, GCID: 41062509, BOARD: generic, EABI: aarch64, DATE: Mon Jun 16 16:07:13 UTC 2025\n# KERNEL_VARIANT: oot\nTARGET_USERSPACE_LIB_DIR=nvidia\nTARGET_USERSPACE_LIB_DIR_PATH=usr/lib/aarch64-linux-gnu/nvidia\n",
+      "stderr": ""
+    }
+  ]
+}

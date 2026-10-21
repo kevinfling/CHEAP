@@ -1,0 +1,4 @@
+backend,configured_backend,n,dims,operator,params,tolerance,setup_ms,first_ms,median_ms,p95_ms,iqr_ms,iterations,true_residual,covariance_error,peak_bytes,replacement_policy,result
+toeplitz_fft,FFTW3,17,1d,toeplitz_fft_apply,exponential_rho_0.3,1e-8,0.561871007,0.00352101028,0.000671997666,0.000704005361,3.20076942e-05,0,1.77942167041e-16,nan,10596352,none,0
+pcg,FFTW3,17,1d,original_toeplitz_cg,exponential_rho_0.3,1e-8,0.562031001,0.0166729987,0.012960501,0.0132800043,6.30170107e-05,13,1.17892176443e-08,nan,10596352,continue,0
+circulant,FFTW3,17,1d,psd_embedding_draw_fft_only,exponential_rho_0.3,1e-8,0.0100799948,0.000833004713,0.000448003411,0.000479996204,3.19927931e-05,0,nan,0.0372105169747,10596352,none,0

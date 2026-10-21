@@ -116,7 +116,7 @@ static void test_weights_matern_ev(void)
     /* kappa=2, nu=1.5: DC = pow(4, -1.5) = 0.125 */
     ASSERT_EQ(cheap_weights_matern_ev(N, mu, 2.0, 1.5, w), CHEAP_OK);
     ASSERT_TRUE(all_finite(w, N));
-    ASSERT_NEAR(w[0], pow(4.0, -1.5), 1e-14);
+    ASSERT_NEAR(w[0], pow(4.0, -2.0), 1e-14);
 
     /* Monotone decreasing: (kappa² + mu[k])^(-nu) decreases as mu increases */
     for (int k = 1; k < N; ++k)
@@ -174,7 +174,7 @@ static void test_weights_matern_2d(void)
     {
         double sx = sin(M_PI * 1.0 / (2.0 * (double)NX));
         double lx = 4.0 * sx * sx;
-        double expected = pow(1.0 + lx, -1.5);
+        double expected = pow(1.0 + lx, -2.5);
         ASSERT_NEAR(w[1 * NY + 0], expected, 1e-14);
     }
 
@@ -228,7 +228,7 @@ static void test_weights_anisotropic_matern_2d(void)
     /* DC: pow(CHEAP_EPS_LOG, -1.5) — large but finite and positive */
     ASSERT_TRUE(w[0] > 0.0);
     ASSERT_TRUE(isfinite(w[0]));
-    ASSERT_TRUE(w[0] > 1e10);  /* must be large since base = 1e-12 */
+    ASSERT_NEAR(w[0], 1.0, 1e-14);  /* finite positive mass */
 
     /* Anisotropy breaks symmetry: w[1*NY+0] != w[0*NX+1] for kappa_x != kappa_y */
     {
@@ -237,9 +237,9 @@ static void test_weights_anisotropic_matern_2d(void)
         double lx = 4.0 * sx * sx;
         double ly = 4.0 * sy * sy;
         /* w[1*NY+0] uses kappa_x²*lx + kappa_y²*0 = 4*lx */
-        double expected_10 = pow(4.0 * lx + CHEAP_EPS_LOG, -1.5);
+        double expected_10 = pow(4.0 * lx + 1.0, -2.5);
         /* w[0*NY+1] uses kappa_x²*0 + kappa_y²*ly = 0.25*ly */
-        double expected_01 = pow(0.25 * ly + CHEAP_EPS_LOG, -1.5);
+        double expected_01 = pow(0.25 * ly + 1.0, -2.5);
         ASSERT_NEAR(w[1 * NY + 0], expected_10, 1e-12);
         ASSERT_NEAR(w[0 * NY + 1], expected_01, 1e-12);
         /* Confirm asymmetry */
@@ -685,6 +685,7 @@ static void test_sample_matern_2d(void)
     {
         double w[16 * 16], ref[16 * 16];
         cheap_weights_matern_2d(NX, NY, 1.0, 1.5, w);
+        for (int i = 0; i < N; ++i) w[i] = sqrt(w[i]);
         cheap_apply_2d(&ctx, noise, w, ref);
         for (int i = 0; i < N; ++i)
             ASSERT_NEAR(grf[i], ref[i], 1e-13);
@@ -718,6 +719,7 @@ static void test_sample_matern_3d(void)
     {
         double w[8 * 8 * 8], ref[8 * 8 * 8];
         cheap_weights_matern_3d(NX, NY, NZ, 1.0, 2.5, w);
+        for (int i = 0; i < N; ++i) w[i] = sqrt(w[i]);
         cheap_apply_3d(&ctx, noise, w, ref);
         for (int i = 0; i < N; ++i)
             ASSERT_NEAR(grf[i], ref[i], 1e-13);

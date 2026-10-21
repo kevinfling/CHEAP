@@ -17,8 +17,10 @@
  *   - λ[0] uses the Gupta-Joshi low-frequency asymptotic (no more
  *     CHEAP_EPS_LAMBDA wart); monotonicity of `lambda[]` is now a
  *     strict guarantee under default `cheap_init`.
- *   - `cheap_init_from_toeplitz` accepts a user-supplied first
- *     column and populates `lambda[]` exactly via DCT-II.
+ *   - `cheap_init_from_toeplitz` computes the DCT-II of the first
+ *     column (legacy spectral heuristic; NOT Toeplitz eigenvalues).
+ *   - `cheap_init_from_toeplitz_projection` computes the exact
+ *     Frobenius-optimal DCT-diagonal surrogate of the Toeplitz matrix.
  *   - `cheap_sinkhorn` is allocation-free on its hot path
  *     (scratch buffers live in `cheap_ctx`).
  *   - `restrict` annotations on all non-aliasing pointer params.
@@ -87,7 +89,16 @@
 #define CHEAP_VERSION_PATCH 0
 #define CHEAP_VERSION "0.3.0-tensor-weights"
 
-#include <fftw3.h>
+/* Optional FFTW-shaped backend. Compile notorious_fft implementation in exactly
+ * one translation unit (src/cheap_notorious_fft.c in the CMake build).
+ * Never link libfftw3 alongside this backend.
+ */
+#if defined(CHEAP_USE_NOTORIOUS_FFT)
+#  include "notorious_fft.h"
+#  include "notorious_fft_fftw.h"
+#else
+#  include <fftw3.h>
+#endif
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -242,6 +253,16 @@ typedef struct {
     double current_H;
 } cheap_ctx;
 
+/* Lifecycle contract:
+ * A cheap_ctx must be zero-initialized (cheap_ctx ctx = {0}) before its
+ * first init. Reinitialization of a live context is not supported: call
+ * cheap_destroy first. cheap_destroy is safe for a zeroed or previously
+ * destroyed context. Neither cheap_ctx nor its FFTW plans are thread-safe
+ * when shared between concurrent operations.
+ *
+ * This is a caller contract, not an automatic runtime guard: inspecting
+ * uninitialized or stale pointer fields to detect ownership is undefined.
+ */
 static inline void cheap_destroy(cheap_ctx* ctx)
 {
     if (!ctx) return;
@@ -255,6 +276,9 @@ static inline void cheap_destroy(cheap_ctx* ctx)
     if (ctx->scratch2)   { fftw_free(ctx->scratch2);   ctx->scratch2 = NULL; }
     if (ctx->prev_g)     { fftw_free(ctx->prev_g);     ctx->prev_g = NULL; }
     ctx->is_initialized = 0;
+    ctx->n = 0;
+    ctx->current_eps = -1.0;
+    ctx->current_H = -1.0;
 }
 
 /*
@@ -264,6 +288,7 @@ static inline void cheap_destroy(cheap_ctx* ctx)
  */
 static inline int cheap__alloc_ctx(cheap_ctx* ctx, int n)
 {
+    /* Caller must destroy an existing live context before reinitializing. */
     memset(ctx, 0, sizeof(*ctx));
     ctx->n = n;
     ctx->current_eps = -1.0;
@@ -348,17 +373,10 @@ static inline int cheap_init(cheap_ctx* ctx, int n, double H)
 }
 
 /*
- * cheap_init_from_toeplitz — initialize a context directly from the first
- * column of a symmetric Toeplitz autocovariance matrix. Computes the exact
- * DCT-II eigenvalues, bypassing the Flandrin asymptotic. Useful when the
- * covariance is measured or derived from a non-fBm model.
- *
- *   t:  first column of the n-by-n symmetric Toeplitz matrix (length n).
- *       All eigenvalues (entries of DCT-II(t)) must be strictly positive
- *       for the context to be valid for KRR/Sinkhorn/etc.
- *
- * On success, ctx->lambda holds the exact eigenvalues and ctx->current_H
- * remains -1.0 (sentinel indicating the Flandrin H is not applicable).
+ * LEGACY: this computes DCT-II(first_column), not Toeplitz eigenvalues.
+ * It is retained for compatibility; use cheap_init_from_toeplitz_projection
+ * for the Frobenius-optimal DCT-diagonal surrogate of a symmetric Toeplitz
+ * covariance. Neither function exactly diagonalizes a generic Toeplitz A.
  */
 static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
                                              const double* t)
@@ -373,6 +391,128 @@ static inline int cheap_init_from_toeplitz(cheap_ctx* ctx, int n,
     CHEAP_CONTRACT_FINITE_OR_EDOM(ctx->lambda, n);
     cheap__finalize_sqrt_lambda(ctx);
     return CHEAP_OK;
+}
+
+/* Reusable FFTW workspace for repeated Toeplitz DCT projections.
+ * Caller owns the workspace; not safe for concurrent calls on one instance.
+ * Initialize a zeroed workspace with cheap_toeplitz_projection_workspace_init,
+ * release with cheap_toeplitz_projection_workspace_destroy.
+ */
+typedef struct {
+    int n;
+    double* input;
+    fftw_complex* spectrum;
+    fftw_plan forward;
+    double* coefficients; /* cached temporary: no allocation per projection */
+} cheap_toeplitz_projection_workspace;
+
+static inline void cheap_toeplitz_projection_workspace_destroy(
+    cheap_toeplitz_projection_workspace* ws)
+{
+    if (!ws) return;
+    if (ws->forward) fftw_destroy_plan(ws->forward);
+    if (ws->input) fftw_free(ws->input);
+    if (ws->spectrum) fftw_free(ws->spectrum);
+    if (ws->coefficients) fftw_free(ws->coefficients);
+    memset(ws, 0, sizeof(*ws));
+}
+
+static inline int cheap_toeplitz_projection_workspace_init(
+    cheap_toeplitz_projection_workspace* ws, int n)
+{
+    if (!ws || n < 2 || n > INT32_MAX/2) return CHEAP_EINVAL;
+    memset(ws, 0, sizeof(*ws));
+    ws->n = n;
+    ws->input = (double*)fftw_malloc((size_t)2*n*sizeof(double));
+    ws->spectrum = (fftw_complex*)fftw_malloc(((size_t)n+1)*sizeof(fftw_complex));
+    ws->coefficients = (double*)fftw_malloc((size_t)n*sizeof(double));
+    if (!ws->input || !ws->spectrum || !ws->coefficients) {
+        cheap_toeplitz_projection_workspace_destroy(ws);
+        return CHEAP_ENOMEM;
+    }
+    ws->forward = fftw_plan_dft_r2c_1d(2*n, ws->input,
+                                         ws->spectrum, FFTW_ESTIMATE);
+    if (!ws->forward) {
+        cheap_toeplitz_projection_workspace_destroy(ws);
+        return CHEAP_ENOMEM;
+    }
+    return CHEAP_OK;
+}
+
+/* Computes projection weights without reallocating or replanning.
+ * Does not modify output on invalid input or a failed positivity check.
+ * 'weights' and 't' must not overlap.
+ */
+static inline int cheap_toeplitz_projection_with_workspace(
+    cheap_toeplitz_projection_workspace* ws, const double* t,
+    double* weights)
+{
+    if (!ws || !ws->forward || !t || !weights || ws->n < 2)
+        return CHEAP_EINVAL;
+    const int n = ws->n;
+    for (int d=0; d<n; ++d) if (!isfinite(t[d])) return CHEAP_EDOM;
+    double* tmp = ws->coefficients;
+    if (!tmp) return CHEAP_EINVAL;
+    memset(ws->input, 0, (size_t)2*n*sizeof(double));
+    double sum = 0.0;
+    for (int d=1; d<n; ++d) {
+        ws->input[d] = (double)(n-d)*t[d];
+        sum += ws->input[d];
+    }
+    fftw_execute(ws->forward);
+    for (int k=1; k<n; ++k) {
+#if defined(CHEAP_USE_NOTORIOUS_FFT) && defined(__cplusplus)
+        tmp[k] = ws->spectrum[k].re;
+#else
+        tmp[k] = ws->spectrum[k][0];
+#endif
+    }
+    memset(ws->input, 0, (size_t)2*n*sizeof(double));
+    for (int d=1; d<n; ++d) ws->input[d] = t[d];
+    fftw_execute(ws->forward);
+    tmp[0] = t[0] + (2.0/(double)n)*sum;
+    for (int k=1; k<n; ++k)
+        tmp[k] = t[0] + (2.0/(double)n)*
+            (tmp[k]+
+#if defined(CHEAP_USE_NOTORIOUS_FFT) && defined(__cplusplus)
+             ws->spectrum[k].im
+#else
+             ws->spectrum[k][1]
+#endif
+             /sin(M_PI*(double)k/(double)n));
+    for (int k=0; k<n; ++k) {
+        if (!isfinite(tmp[k]) || !(tmp[k]>0.0)) {
+            return CHEAP_EDOM;
+        }
+    }
+    memcpy(weights,tmp,(size_t)n*sizeof(double));
+    return CHEAP_OK;
+}
+
+/* Exact Frobenius-optimal DCT-II surrogate of symmetric Toeplitz A.
+ * A[i,j]=t[abs(i-j)]. Not the eigenvalues of generic Toeplitz A.
+ * O(n log n) arithmetic, O(n) workspace. FFTW planning is not cached here;
+ * use cheap_toeplitz_projection_with_workspace for repeated updates.
+ * The context must be fresh or previously destroyed before initialization.
+ */
+static inline int cheap_init_from_toeplitz_projection(cheap_ctx* ctx,
+                                                       int n, const double* t)
+{
+    if (!ctx || !t || n < 2 || n > INT32_MAX/2) return CHEAP_EINVAL;
+    for (int d=0; d<n; ++d)
+        if (!isfinite(t[d])) return CHEAP_EDOM;
+    cheap_toeplitz_projection_workspace ws;
+    memset(&ws, 0, sizeof(ws));
+    int rc = cheap_toeplitz_projection_workspace_init(&ws,n);
+    if (rc != CHEAP_OK) return rc;
+    rc = cheap__alloc_ctx(ctx,n);
+    if (rc == CHEAP_OK) {
+        rc = cheap_toeplitz_projection_with_workspace(&ws,t,ctx->lambda);
+        if (rc == CHEAP_OK) cheap__finalize_sqrt_lambda(ctx);
+        else cheap_destroy(ctx);
+    }
+    cheap_toeplitz_projection_workspace_destroy(&ws);
+    return rc;
 }
 
 /* ============================================================
@@ -1321,18 +1461,20 @@ static inline int cheap_toeplitz_solve_precomp(cheap_ctx* restrict ctx,
                                                   double* restrict x)
 {
     if (!ctx || !ctx->is_initialized || !lambda_t || !y || !x) return CHEAP_EINVAL;
-    if (lambda_reg < 0.0) return CHEAP_EINVAL;
+    if (!isfinite(lambda_reg) || lambda_reg < 0.0) return CHEAP_EINVAL;
     const int n = ctx->n;
     const double norm = 1.0 / (2.0 * (double)n);
-    for (int i = 0; i < n; ++i) if (!isfinite(y[i])) return CHEAP_EDOM;
+    /* Validate all denominators before writing the output or workspace.
+     * This solves the DCT-diagonal surrogate, NOT generic Toeplitz A. */
+    for (int i = 0; i < n; ++i) {
+        if (!isfinite(y[i]) || !isfinite(lambda_t[i])) return CHEAP_EDOM;
+        const double denom = lambda_t[i] + lambda_reg;
+        if (!isfinite(denom) || !(denom > 0.0)) return CHEAP_EDOM;
+    }
     memcpy(ctx->workspace, y, (size_t)n * sizeof(double));
     fftw_execute(ctx->plan_fwd);
-    for (int k = 0; k < n; ++k) {
-        double denom = lambda_t[k] + lambda_reg;
-        if (fabs(denom) < CHEAP_EPS_DIV)
-            denom = (denom >= 0.0) ? CHEAP_EPS_DIV : -CHEAP_EPS_DIV;
-        ctx->workspace[k] /= denom;
-    }
+    for (int k = 0; k < n; ++k)
+        ctx->workspace[k] /= lambda_t[k] + lambda_reg;
     fftw_execute(ctx->plan_inv);
     for (int i = 0; i < n; ++i) x[i] = ctx->workspace[i] * norm;
     return CHEAP_OK;
@@ -2319,7 +2461,7 @@ static inline int cheap_weights_laplacian_ev(int n, double* restrict weights_out
 /*
  * cheap_weights_matern_ev — Matérn covariance spectral weights.
  *
- *   weights_out[k] = (κ² + μ[k])^(-ν),   k = 0..n-1
+ *   weights_out[k] = (κ² + μ[k])^(-(ν + 1/2)),   k = 0..n-1
  *
  * Spectral density of the Matérn-ν covariance kernel when μ[] are the
  * spatial-frequency squared values (e.g. Laplacian eigenvalues). Sampling
@@ -2345,12 +2487,12 @@ static inline int cheap_weights_matern_ev(int n,
     if (n < 2 || !mu || kappa <= 0.0 || nu <= 0.0 || !weights_out)
         return CHEAP_EINVAL;
     for (int i = 0; i < n; ++i)
-        if (!isfinite(mu[i])) return CHEAP_EDOM;
+        if (!isfinite(mu[i]) || mu[i] < 0.0) return CHEAP_EDOM;
     double kk = kappa * kappa;
     for (int k = 0; k < n; ++k) {
         double base = kk + mu[k];
-        if (base < CHEAP_EPS_LOG) base = CHEAP_EPS_LOG;
-        weights_out[k] = pow(base, -nu);
+        if (!isfinite(base) || base <= 0.0) return CHEAP_EDOM;
+        weights_out[k] = pow(base, -(nu + 0.5));
     }
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, n);
     return CHEAP_OK;
@@ -2359,7 +2501,7 @@ static inline int cheap_weights_matern_ev(int n,
 /*
  * cheap_weights_matern_2d — isotropic 2D Matérn covariance weights.
  *
- *   weights_out[j*ny + k] = (κ² + lx[j] + ly[k])^(-ν)
+ *   weights_out[j*ny + k] = (κ² + lx[j] + ly[k])^(-(ν + 1))
  *
  * where lx[j] = 4*sin²(πj/(2*nx)), ly[k] = 4*sin²(πk/(2*ny)).
  * Equivalent to calling cheap_weights_laplacian_2d then matern_ev on the
@@ -2385,8 +2527,8 @@ static inline int cheap_weights_matern_2d(int nx, int ny,
         for (int k = 0; k < ny; ++k) {
             double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
             double base = kk + lx + 4.0 * sy * sy;
-            if (base < CHEAP_EPS_LOG) base = CHEAP_EPS_LOG;
-            weights_out[j * ny + k] = pow(base, -nu);
+            if (!isfinite(base) || base <= 0.0) return CHEAP_EDOM;
+            weights_out[j * ny + k] = pow(base, -(nu + 1.0));
         }
     }
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
@@ -2396,7 +2538,7 @@ static inline int cheap_weights_matern_2d(int nx, int ny,
 /*
  * cheap_weights_matern_3d — isotropic 3D Matérn covariance weights.
  *
- *   weights_out[(j*ny+k)*nz + l] = (κ² + lx[j] + ly[k] + lz[l])^(-ν)
+ *   weights_out[(j*ny+k)*nz + l] = (κ² + lx[j] + ly[k] + lz[l])^(-(ν + 3/2))
  *
  * Row-major: (j*ny+k)*nz+l. DC: κ^(-2ν) — finite, positive.
  *
@@ -2420,8 +2562,8 @@ static inline int cheap_weights_matern_3d(int nx, int ny, int nz,
             for (int l = 0; l < nz; ++l) {
                 double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
                 double base = kk + lx + ly + 4.0 * sz * sz;
-                if (base < CHEAP_EPS_LOG) base = CHEAP_EPS_LOG;
-                weights_out[(j * ny + k) * nz + l] = pow(base, -nu);
+                if (!isfinite(base) || base <= 0.0) return CHEAP_EDOM;
+                weights_out[(j * ny + k) * nz + l] = pow(base, -(nu + 1.5));
             }
         }
     }
@@ -2432,11 +2574,11 @@ static inline int cheap_weights_matern_3d(int nx, int ny, int nz,
 /*
  * cheap_weights_anisotropic_matern_2d — anisotropic 2D Matérn weights.
  *
- *   weights_out[j*ny + k] = (κ_x²·lx[j] + κ_y²·ly[k] + CHEAP_EPS_LOG)^(-ν)
+ *   weights_out[j*ny + k] = (1 + κ_x²·lx[j] + κ_y²·ly[k])^(-(ν+1))
  *
  * Per-axis inverse length scales κ_x, κ_y allow directional anisotropy.
- * CHEAP_EPS_LOG (1e-12) regularizes the DC bin: w[0] ≈ (1e-12)^(-ν), which
- * is large but finite. Zero it after the call if you want DC suppressed.
+ * Uses a fixed unit mass (kappa=1). Axis parameters are directional
+ * coefficients; use cheap_weights_anisotropic_matern_2d_verified for explicit mass.
  *
  * Row-major: weights_out[j*ny + k].
  *
@@ -2461,8 +2603,9 @@ static inline int cheap_weights_anisotropic_matern_2d(int nx, int ny,
         double lx = 4.0 * sx * sx;
         for (int k = 0; k < ny; ++k) {
             double sy = sin(M_PI * (double)k / (2.0 * (double)ny));
-            double base = kkx * lx + kky * 4.0 * sy * sy + CHEAP_EPS_LOG;
-            weights_out[j * ny + k] = pow(base, -nu);
+            double base = kkx * lx + kky * 4.0 * sy * sy + 1.0;
+            if (!isfinite(base) || base <= 0.0) return CHEAP_EDOM;
+            weights_out[j * ny + k] = pow(base, -(nu + 1.0));
         }
     }
     CHEAP_CONTRACT_FINITE_OR_EDOM(weights_out, nx * ny);
@@ -2473,9 +2616,9 @@ static inline int cheap_weights_anisotropic_matern_2d(int nx, int ny,
  * cheap_weights_anisotropic_matern_3d — anisotropic 3D Matérn weights.
  *
  *   weights_out[(j*ny+k)*nz+l] =
- *       (κ_x²·lx[j] + κ_y²·ly[k] + κ_z²·lz[l] + CHEAP_EPS_LOG)^(-ν)
+ *       (1 + κ_x²·lx[j] + κ_y²·ly[k] + κ_z²·lz[l])^(-(ν+3/2))
  *
- * DC: w[0] ≈ (CHEAP_EPS_LOG)^(-ν) — large but finite. Zero if desired.
+ * DC: w[0] = 1; positive unit mass, not an artificial epsilon floor.
  * Row-major: (j*ny+k)*nz+l.
  */
 static inline int cheap_weights_anisotropic_matern_3d(int nx, int ny, int nz,
@@ -2500,8 +2643,9 @@ static inline int cheap_weights_anisotropic_matern_3d(int nx, int ny, int nz,
             for (int l = 0; l < nz; ++l) {
                 double sz = sin(M_PI * (double)l / (2.0 * (double)nz));
                 double base = kkx * lx + kky * ly + kkz * 4.0 * sz * sz
-                              + CHEAP_EPS_LOG;
-                weights_out[(j * ny + k) * nz + l] = pow(base, -nu);
+                              + 1.0;
+                if (!isfinite(base) || base <= 0.0) return CHEAP_EDOM;
+            weights_out[(j * ny + k) * nz + l] = pow(base, -(nu + 1.5));
             }
         }
     }
@@ -2519,8 +2663,8 @@ static inline int cheap_weights_anisotropic_matern_3d(int nx, int ny, int nz,
  * (μ[0]=0) satisfies exp(0)=1.0 — DC is always preserved. Attenuate it
  * manually after the call if the application requires mean removal.
  *
- * Connection to Sinkhorn: the Gibbs kernel exp(-λ_k/ε) is a heat propagator
- * with t = 1/ε on the Flandrin spectrum (μ = ctx->lambda).
+ * An operator exponential is NOT generally an elementwise entropic-OT
+ * Gibbs kernel exp(-C_ij/epsilon). Use cheap_transport.h for OT.
  *
  * Works with both Flandrin and Laplacian bases. t > 0 required.
  *
@@ -3064,7 +3208,7 @@ static inline int cheap_sample_matern_2d(cheap_ctx_2d* restrict ctx,
     rc = cheap_forward_2d(ctx, white_noise);
     if (rc != CHEAP_OK) return rc;
     /* Pass 3: spectral multiply workspace[i] *= out[i] (weights), then iDCT. */
-    cheap__mul_inplace(ctx->workspace, out, n);
+    for (int k = 0; k < n; ++k) ctx->workspace[k] *= sqrt(out[k]);
     fftw_execute(ctx->plan_inv);
     const double norm = 1.0 / (4.0 * (double)nx * (double)ny);
     cheap__scale_copy(out, ctx->workspace, norm, n);
@@ -3100,7 +3244,7 @@ static inline int cheap_sample_matern_3d(cheap_ctx_3d* restrict ctx,
     rc = cheap_forward_3d(ctx, white_noise);
     if (rc != CHEAP_OK) return rc;
     /* Pass 3: spectral multiply, then iDCT into out. */
-    cheap__mul_inplace(ctx->workspace, out, n);
+    for (int k = 0; k < n; ++k) ctx->workspace[k] *= sqrt(out[k]);
     fftw_execute(ctx->plan_inv);
     const double norm = 1.0 / (8.0 * (double)nx * (double)ny * (double)nz);
     cheap__scale_copy(out, ctx->workspace, norm, n);

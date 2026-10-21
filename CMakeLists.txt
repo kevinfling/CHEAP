@@ -30,6 +30,27 @@ set(CMAKE_CXX_FLAGS_ASAN  "${CMAKE_C_FLAGS_ASAN}")
 set(CMAKE_CXX_FLAGS_UBSAN "${CMAKE_C_FLAGS_UBSAN}")
 set(CMAKE_CXX_FLAGS_TSAN  "${CMAKE_C_FLAGS_TSAN}")
 
+# Backend selection. Notorious-FFT is a separately sourced MIT-licensed
+# FFTW-shaped subset. Pin the commit for reproducible builds.
+set(CHEAP_FFT_BACKEND "FFTW3" CACHE STRING "FFT backend: FFTW3 or NOTORIOUS")
+set_property(CACHE CHEAP_FFT_BACKEND PROPERTY STRINGS FFTW3 NOTORIOUS)
+
+if(CHEAP_FFT_BACKEND STREQUAL "NOTORIOUS")
+    include(FetchContent)
+    FetchContent_Declare(notorious_fft
+        GIT_REPOSITORY https://github.com/NotoriousLOB/Notorious-FFT.git
+        GIT_TAG a9a48e61eee91ee7182a013c32a4cae0f64f6da3 # v1.1.2
+        SOURCE_SUBDIR _cheap_no_cmake)
+    FetchContent_GetProperties(notorious_fft)
+    if(NOT notorious_fft_POPULATED)
+        FetchContent_Populate(notorious_fft)
+    endif()
+    add_library(cheap_fft_backend STATIC src/cheap_notorious_fft.c)
+    target_include_directories(cheap_fft_backend SYSTEM PUBLIC
+        "${notorious_fft_SOURCE_DIR}/include")
+    target_compile_definitions(cheap_fft_backend PUBLIC CHEAP_USE_NOTORIOUS_FFT=1)
+    target_link_libraries(cheap_fft_backend PUBLIC m)
+elseif(CHEAP_FFT_BACKEND STREQUAL "FFTW3")
 # ---------------------------------------------------------------------------
 # FFTW3 detection — three-tier fallback
 # ---------------------------------------------------------------------------
@@ -77,6 +98,10 @@ if(NOT TARGET FFTW3::fftw3)
     message(FATAL_ERROR "FFTW3 could not be found or built.")
 endif()
 
+else()
+    message(FATAL_ERROR "Unsupported CHEAP_FFT_BACKEND: ${CHEAP_FFT_BACKEND}")
+endif()
+
 # ---------------------------------------------------------------------------
 # CHEAP INTERFACE library
 # ---------------------------------------------------------------------------
@@ -86,7 +111,11 @@ target_include_directories(cheap INTERFACE
     $<INSTALL_INTERFACE:include>)
 target_compile_options(cheap INTERFACE
     -Wall -Wextra -pedantic -march=native)
-target_link_libraries(cheap INTERFACE FFTW3::fftw3 m)
+if(CHEAP_FFT_BACKEND STREQUAL "NOTORIOUS")
+    target_link_libraries(cheap INTERFACE cheap_fft_backend m)
+else()
+    target_link_libraries(cheap INTERFACE FFTW3::fftw3 m)
+endif()
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -122,6 +151,46 @@ add_executable(test_cheap_weights tests/test_cheap_weights.c)
 target_link_libraries(test_cheap_weights PRIVATE cheap)
 add_test(NAME weights COMMAND test_cheap_weights)
 set_tests_properties(weights PROPERTIES TIMEOUT 60)
+
+add_executable(test_embedding_diagnostics tests/test_embedding_diagnostics.c)
+target_link_libraries(test_embedding_diagnostics PRIVATE cheap)
+add_test(NAME embedding_diagnostics COMMAND test_embedding_diagnostics)
+set_tests_properties(embedding_diagnostics PROPERTIES TIMEOUT 120)
+
+add_executable(test_pcg_contract tests/test_pcg_contract.c)
+target_link_libraries(test_pcg_contract PRIVATE cheap)
+add_test(NAME pcg_contract COMMAND test_pcg_contract)
+set_tests_properties(pcg_contract PROPERTIES TIMEOUT 120)
+
+add_executable(test_pcg tests/test_pcg.c)
+target_link_libraries(test_pcg PRIVATE cheap)
+add_test(NAME pcg COMMAND test_pcg)
+set_tests_properties(pcg PROPERTIES TIMEOUT 120)
+
+add_executable(test_toeplitz_operator tests/test_toeplitz_operator.c)
+target_link_libraries(test_toeplitz_operator PRIVATE cheap)
+add_test(NAME toeplitz_operator COMMAND test_toeplitz_operator)
+set_tests_properties(toeplitz_operator PROPERTIES TIMEOUT 120)
+
+add_executable(test_cheap_toeplitz_projection tests/test_cheap_toeplitz_projection.c)
+target_link_libraries(test_cheap_toeplitz_projection PRIVATE cheap)
+add_test(NAME toeplitz_projection COMMAND test_cheap_toeplitz_projection)
+set_tests_properties(toeplitz_projection PROPERTIES TIMEOUT 60)
+
+add_executable(test_weights_verified tests/test_weights_verified.c)
+target_link_libraries(test_weights_verified PRIVATE cheap)
+add_test(NAME weights_verified COMMAND test_weights_verified)
+set_tests_properties(weights_verified PROPERTIES TIMEOUT 60)
+
+add_executable(test_transport tests/test_transport.c)
+target_link_libraries(test_transport PRIVATE cheap)
+add_test(NAME transport COMMAND test_transport)
+set_tests_properties(transport PROPERTIES TIMEOUT 60)
+
+add_executable(test_transport_extensions tests/test_transport_extensions.c)
+target_link_libraries(test_transport_extensions PRIVATE cheap)
+add_test(NAME transport_extensions COMMAND test_transport_extensions)
+set_tests_properties(transport_extensions PROPERTIES TIMEOUT 60)
 
 endif() # BUILD_TESTING
 
@@ -206,7 +275,7 @@ if(CHEAP_BUILD_CPP)
         $<INSTALL_INTERFACE:include>)
     target_compile_options(cheap_cpp INTERFACE
         -Wall -Wextra -Werror -march=native)
-    target_link_libraries(cheap_cpp INTERFACE FFTW3::fftw3 m)
+    target_link_libraries(cheap_cpp INTERFACE cheap)
 
     # C++ tests
     add_executable(test_cheap_cpp tests/test_cheap_cpp.cpp)
@@ -246,4 +315,15 @@ if(CHEAP_BUILD_CPP)
         target_link_libraries(${example}_cpp PRIVATE cheap_cpp)
         target_compile_definitions(${example}_cpp PRIVATE _POSIX_C_SOURCE=199309L)
     endforeach()
+endif()
+
+# Opt-in evidence harness; not part of correctness CTest timing.
+option(CHEAP_BUILD_EVIDENCE_BENCH "Build matched-accuracy evidence harness" OFF)
+if(CHEAP_BUILD_EVIDENCE_BENCH)
+    add_executable(cheap_bench_evidence bench/bench_matched.c)
+    target_link_libraries(cheap_bench_evidence PRIVATE cheap)
+    target_compile_definitions(cheap_bench_evidence PRIVATE CHEAP_BENCH_BACKEND="${CHEAP_FFT_BACKEND}")
+    add_executable(cheap_bench_preconditioner bench/bench_preconditioner.c)
+    target_link_libraries(cheap_bench_preconditioner PRIVATE cheap)
+    target_compile_definitions(cheap_bench_preconditioner PRIVATE CHEAP_BENCH_BACKEND="${CHEAP_FFT_BACKEND}")
 endif()

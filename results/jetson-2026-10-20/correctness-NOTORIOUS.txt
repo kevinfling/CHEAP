@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /home/damus/Projects/CHEAP/build-jetson-asan-NOTORIOUS
+Test project /home/damus/Projects/CHEAP/build-jetson-asan-NOTORIOUS
+    Start 6: embedding_diagnostics
+1/4 Test #6: embedding_diagnostics ............   Passed    7.17 sec
+    Start 7: pcg_contract
+2/4 Test #7: pcg_contract .....................   Passed    6.90 sec
+    Start 8: pcg
+3/4 Test #8: pcg ..............................   Passed    6.90 sec
+    Start 9: toeplitz_operator
+4/4 Test #9: toeplitz_operator ................   Passed    7.00 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  27.97 sec

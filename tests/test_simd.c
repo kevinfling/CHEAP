@@ -12,7 +12,9 @@
 
 #include "cheap.h"
 
+#ifndef CHEAP_USE_NOTORIOUS_FFT
 #include <fftw3.h>
+#endif
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

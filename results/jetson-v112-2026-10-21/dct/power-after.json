@@ -1,0 +1,27 @@
+{
+  "utc": "2026-10-21T07:40:40.943893+00:00",
+  "commands": [
+    {
+      "command": [
+        "sudo",
+        "-n",
+        "nvpmodel",
+        "-q"
+      ],
+      "exit_status": 0,
+      "stdout": "NV Power Mode: 15W\n0\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "sudo",
+        "-n",
+        "jetson_clocks",
+        "--show"
+      ],
+      "exit_status": 0,
+      "stdout": "SOC family:tegra234  Machine:NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super\nOnline CPUs: 0-5\ncpu0:  Online=1 Governor=schedutil MinFreq=1497600 MaxFreq=1497600 CurrentFreq=1497600 IdleStates: WFI=0 c7=0 \ncpu1:  Online=1 Governor=schedutil MinFreq=1497600 MaxFreq=1497600 CurrentFreq=1497600 IdleStates: WFI=0 c7=0 \ncpu2:  Online=1 Governor=schedutil MinFreq=1497600 MaxFreq=1497600 CurrentFreq=1497600 IdleStates: WFI=0 c7=0 \ncpu3:  Online=1 Governor=schedutil MinFreq=1497600 MaxFreq=1497600 CurrentFreq=1497600 IdleStates: WFI=0 c7=0 \ncpu4:  Online=1 Governor=schedutil MinFreq=1497600 MaxFreq=1497600 CurrentFreq=1497600 IdleStates: WFI=0 c7=0 \ncpu5:  Online=1 Governor=schedutil MinFreq=1497600 MaxFreq=1497600 CurrentFreq=1497600 IdleStates: WFI=0 c7=0 \nGPU MinFreq=612000000 MaxFreq=612000000 CurrentFreq=612000000\nActive GPU TPCs: 4\nEMC MinFreq=204000000 MaxFreq=2133000000 CurrentFreq=2133000000 FreqOverride=1\nFAN Dynamic Speed Control=nvfancontrol hwmon0_pwm1=59\nNV Power Mode: 15W\n",
+      "stderr": ""
+    }
+  ]
+}

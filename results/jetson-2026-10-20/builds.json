@@ -1,0 +1,30 @@
+{
+  "FFTW3": {
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"FFTW3\\\" -I/home/damus/Projects/CHEAP/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -c /home/damus/Projects/CHEAP/bench/bench_matched.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_matched.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -o cheap_bench_evidence  /usr/lib/aarch64-linux-gnu/libfftw3.so -lm \n",
+    "binary_sha256": "186774fa4e5ad0215a8097a96e8b7c813699e2baf54d6fc294ccbd5c5bf7395e"
+  },
+  "NOTORIOUS": {
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_USE_NOTORIOUS_FFT=1 -isystem /home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -std=c99 -o CMakeFiles/cheap_fft_backend.dir/src/cheap_notorious_fft.c.o -c /home/damus/Projects/CHEAP/src/cheap_notorious_fft.c",
+        "file": "/home/damus/Projects/CHEAP/src/cheap_notorious_fft.c"
+      },
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"NOTORIOUS\\\" -DCHEAP_USE_NOTORIOUS_FFT=1 -I/home/damus/Projects/CHEAP/include -isystem /home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -c /home/damus/Projects/CHEAP/bench/bench_matched.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_matched.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -o cheap_bench_evidence  libcheap_fft_backend.a -lm \n",
+    "binary_sha256": "58632ba1a46e4ce35cd5c86186412af1d6c9cd8948f1a07e84cc343c921e18cf",
+    "dependency_commit": "681ae621f51731f84cded6872dcb1f1082105168"
+  }
+}

@@ -1,0 +1,145 @@
+7057: static void notorious_fft_direct_t2t3(notorious_fft_real* x, notorious_fft_real* y,
+7058:                                      const notorious_fft_aux* a, int inverse, int sine) {
+7059:     int N = a->N;
+7060:     if (N == 1) { y[0] = (inverse ? 1 : 2) * x[0]; return; }
+7061:     const notorious_fft_real *src = x;
+7062:     if (x == y) {
+7063:         memcpy(a->scratch_im, x, (size_t)N * sizeof(*x));
+7064:         src = a->scratch_im;
+7065:     }
+7066:     const double step = (double)NOTORIOUS_FFT_PI / N;
+7067:     for (int k = 0; k < N; ++k) {
+7068:         double sum = 0;
+7069:         /* Select direction and endpoint weights outside the quadratic loop. */
+7070:         if (!inverse) {
+7071:             double phase = step * (k + (sine ? 1.0 : 0.0));
+7072:             if (sine) {
+7073:                 for (int j = 0; j < N; ++j) sum += 2 * (double)src[j] * sin(phase * (j + 0.5));
+7074:             } else {
+7075:                 for (int j = 0; j < N; ++j) sum += 2 * (double)src[j] * cos(phase * (j + 0.5));
+7076:             }
+7077:         } else {
+7078:             double phase = step * (k + 0.5);
+7079:             if (sine) {
+7080:                 sum = (k % 2 ? -1.0 : 1.0) * src[N - 1];
+7081:                 for (int j = 0; j < N - 1; ++j) sum += 2 * (double)src[j] * sin(phase * (j + 1.0));
+7082:             } else {
+7083:                 sum = src[0];
+7084:                 for (int j = 1; j < N; ++j) sum += 2 * (double)src[j] * cos(phase * j);
+7085:             }
+7086:         }
+7087:         y[k] = (notorious_fft_real)sum;
+7088:     }
+7089: }
+
+7152: void notorious_fft_dct2(notorious_fft_real* x, notorious_fft_real* y, const notorious_fft_aux* a) {
+7153:     if (!a || !x || !y) return;
+7154:     if (a->direct_r2r) { notorious_fft_direct_t2t3(x, y, a, 0, 0); return; }
+7155:     if (a->r2r_algo == NOTORIOUS_R2R_ALGO_DCT_FFT_2N) {
+7156:         notorious_fft_s_dct2_2n(x, y, a);
+7157:         return;
+7158:     }
+7159:     if (a->plan) {
+7160:         int N = a->N;
+7161:         (void)N;
+7162: #if NOTORIOUS_FFT_HAS_AVX2 && !defined(NOTORIOUS_FFT_SINGLE)
+7163:         if (N % 8 == 0 && N >= 16) {
+7164:             notorious_fft_real* reordered = a->scratch_im;
+7165:             notorious_fft_real* z_buf = a->scratch_im + N;
+7166:             for (int i = 0; i < N/2; i++) {
+7167:                 reordered[i]       = x[2*i];
+7168:                 reordered[N/2 + i] = x[N - 1 - 2*i];
+7169:             }
+7170:             notorious_fft_realdft(reordered, (notorious_fft_cmpl*)z_buf, a);
+7171:             notorious_fft_dct2_postprocess_avx2(N, y, z_buf, a->scratch_re);
+7172:             return;
+7173:         }
+7174: #endif
+7175: #if NOTORIOUS_FFT_HAS_NEON && !defined(NOTORIOUS_FFT_SINGLE)
+7176:         /* Use NEON-accelerated version for 1D DCT-2 when N is multiple of 4 */
+7177:         if (N % 4 == 0 && N >= 8) {
+7178:             notorious_fft_dct2_neon_1d(x, y, a);
+7179:             return;
+7180:         }
+7181: #endif
+7182:         notorious_fft_s_dct2_1d(x, y, a);
+7183:     } else if (a->sub2) {
+7184:         notorious_fft_apply_mdrx(x, y, a, notorious_fft_dct2);
+7185:     } else {
+7186:         notorious_fft_s_dct2_1d(x, y, a);
+7187:     }
+7188: }
+
+7336: void notorious_fft_dct3(notorious_fft_real* x, notorious_fft_real* y, const notorious_fft_aux* a) {
+7337:     if (!a || !x || !y) return;
+7338:     if (a->direct_r2r) { notorious_fft_direct_t2t3(x, y, a, 1, 0); return; }
+7339:     if (a->r2r_algo == NOTORIOUS_R2R_ALGO_DCT_FFT_2N) {
+7340:         notorious_fft_s_dct3_2n(x, y, a);
+7341:         return;
+7342:     }
+7343:     if (a->plan) {
+7344:         notorious_fft_s_dct3_1d(x, y, a);
+7345:     } else if (a->sub2) {
+7346:         notorious_fft_apply_mdrx(x, y, a, notorious_fft_dct3);
+7347:     } else {
+7348:         notorious_fft_s_dct3_1d(x, y, a);
+7349:     }
+7350: }
+
+7913: notorious_fft_aux* notorious_fft_mkaux_t2t3_1d(int N) {
+7914:     size_t bytes;
+7915:     if (N <= 0 || !notorious_fft_size_mul((size_t)N, sizeof(notorious_fft_real), &bytes)) return NULL;
+7916:     if (N == 1) {
+7917:         notorious_fft_aux *direct = (notorious_fft_aux*)calloc(1, sizeof(*direct));
+7918:         if (!direct) return NULL;
+7919:         direct->N = N;
+7920:         direct->direct_r2r = 1;
+7921:         direct->r2r_algo = NOTORIOUS_R2R_ALGO_DIRECT;
+7922:         direct->scratch_im = (notorious_fft_real*)notorious_fft_malloc(bytes);
+7923:         if (!direct->scratch_im) { notorious_fft_free_aux(direct); return NULL; }
+7924:         return direct;
+7925:     }
+7926:     if ((N & (N - 1)) && NOTORIOUS_FFT_R2R_DCT_2N)
+7927:         return notorious_fft_mkaux_t2t3_fft_2n(N);
+7928:
+7929:     notorious_fft_aux* a = notorious_fft_mkaux_realdft_1d(N);
+7930:     if (!a) return NULL;
+7931:     if (!notorious_fft_t2t3_alloc_scratch(a)) {
+7932:         notorious_fft_free_aux(a);
+7933:         return NULL;
+7934:     }
+7935:     a->direct_r2r = 0;
+7936:     a->r2r_algo = (N & (N - 1)) ? NOTORIOUS_R2R_ALGO_DCT_FFT_N : NOTORIOUS_R2R_ALGO_POW2_REALDFT;
+7937:     return a;
+7938: }
+
+8513: void notorious_fft_execute_r2r(const notorious_fft_io_plan *p, notorious_fft_real *in, notorious_fft_real *out) {
+8514:     if (!p || p->kind != NOTORIOUS_FFT_IO_R2R || !in || !out) return;
+8515:     int last = p->rank - 1;
+8516:     size_t stride = (size_t)p->n[last];
+8517:     /* Transform contiguous rows directly into output. Only exact aliasing
+8518:      * needs an input copy; kernels always receive disjoint input and output. */
+8519:     for (size_t base = 0; base < p->r2r_count; base += stride) {
+8520:         notorious_fft_real *src = in + base;
+8521:         if (in == out) {
+8522:             memcpy(p->axis_in, src, stride * sizeof(*src));
+8523:             src = p->axis_in;
+8524:         }
+8525:         notorious_fft_execute_axis(p->r2r_kind[last], p->axis_aux[last], src, out + base);
+8526:     }
+8527:     /* Gather complete strided lines before scattering into the same tensor. */
+8528:     for (int axis = last - 1; axis >= 0; --axis) {
+8529:         size_t len = (size_t)p->n[axis];
+8530:         size_t block = len * stride;
+8531:         for (size_t base = 0; base < p->r2r_count; base += block) {
+8532:             for (size_t offset = 0; offset < stride; ++offset) {
+8533:                 for (size_t j = 0; j < len; ++j)
+8534:                     p->axis_in[j] = out[base + offset + j * stride];
+8535:                 notorious_fft_execute_axis(p->r2r_kind[axis], p->axis_aux[axis], p->axis_in, p->axis_out);
+8536:                 for (size_t j = 0; j < len; ++j)
+8537:                     out[base + offset + j * stride] = p->axis_out[j];
+8538:             }
+8539:         }
+8540:         stride = block;
+8541:     }
+8542: }
