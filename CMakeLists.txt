@@ -152,6 +152,11 @@ target_link_libraries(test_cheap_weights PRIVATE cheap)
 add_test(NAME weights COMMAND test_cheap_weights)
 set_tests_properties(weights PROPERTIES TIMEOUT 60)
 
+add_executable(test_pcg tests/test_pcg.c)
+target_link_libraries(test_pcg PRIVATE cheap)
+add_test(NAME pcg COMMAND test_pcg)
+set_tests_properties(pcg PROPERTIES TIMEOUT 120)
+
 add_executable(test_toeplitz_operator tests/test_toeplitz_operator.c)
 target_link_libraries(test_toeplitz_operator PRIVATE cheap)
 add_test(NAME toeplitz_operator COMMAND test_toeplitz_operator)
