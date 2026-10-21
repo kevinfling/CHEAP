@@ -120,6 +120,36 @@ static inline int cheap_circulant_sampler_init_approx_clip(
     cheap_circulant_sampler *s,const double *lags,size_t n,size_t L,
     double tol,int backend)
 {return cheap_circulant_sampler_init_mode(s,lags,n,L,tol,backend,1);}
+/* Bounded exact embedding search. Each failed candidate is destroyed before
+ * trying the next power of two. No clipping of materially negative modes.
+ * max_L is a hard bound and must itself be a valid power of two.
+ * On exhaustion, the final rejection info is preserved without resources.
+ */
+static inline int cheap_circulant_sampler_init_search(
+    cheap_circulant_sampler *s,const double *lags,size_t n,size_t max_L,
+    double tol,int backend)
+{
+    size_t L=1,needed;
+    int rc;
+    if(!s||!lags||n<1||n>(size_t)INT_MAX/2u ||
+       max_L==0||max_L>(size_t)INT_MAX||(max_L&(max_L-1)))
+        return CHEAP_EINVAL;
+    needed=2*n-1;
+    while(L<needed) {
+        if(L>(size_t)INT_MAX/2u)return CHEAP_EINVAL;
+        L*=2;
+    }
+    if(L>max_L)return CHEAP_EINVAL;
+    for(;;) {
+        rc=cheap_circulant_sampler_init(s,lags,n,L,tol,backend);
+        if(rc==CHEAP_OK)return CHEAP_OK;
+        if(rc!=CHEAP_EDOM||s->info.status!=CHEAP_EMBED_NOT_PSD)
+            return rc;
+        if(L>max_L/2u)return CHEAP_EDOM;
+        L*=2;
+        memset(&s->info,0,sizeof(s->info));
+    }
+}
 /* z: L independent standard normals, with packed frequency indexing:
  * z[0] for DC; z[2k-1],z[2k] for interior real/imag components;
  * z[L-1] for Nyquist when L even. No hidden RNG or hot-path allocation.
