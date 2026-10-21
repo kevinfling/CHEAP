@@ -1,0 +1,81 @@
+4308: /* Correctness fallback for sizes outside the verified power-of-two embedding.
+4309:  * Copy only for exact aliasing; partial overlap is outside the API contract. */
+4310: static void notorious_fft_direct_t2t3(notorious_fft_real* x, notorious_fft_real* y,
+4311:                                      const notorious_fft_aux* a, int inverse, int sine) {
+4312:     int N = a->N;
+4313:     if (N == 1) { y[0] = (inverse ? 1 : 2) * x[0]; return; }
+4314:     const notorious_fft_real *src = x;
+4315:     if (x == y) {
+4316:         memcpy(a->scratch_im, x, (size_t)N * sizeof(*x));
+4317:         src = a->scratch_im;
+4318:     }
+4319:     const double step = (double)NOTORIOUS_FFT_PI / N;
+4320:     for (int k = 0; k < N; ++k) {
+4321:         double sum = 0;
+4322:         /* Select direction and endpoint weights outside the quadratic loop. */
+4323:         if (!inverse) {
+4324:             double phase = step * (k + (sine ? 1.0 : 0.0));
+4325:             if (sine) {
+4326:                 for (int j = 0; j < N; ++j) sum += 2 * (double)src[j] * sin(phase * (j + 0.5));
+4327:             } else {
+4328:                 for (int j = 0; j < N; ++j) sum += 2 * (double)src[j] * cos(phase * (j + 0.5));
+4329:             }
+4330:         } else {
+4331:             double phase = step * (k + 0.5);
+4332:             if (sine) {
+4333:                 sum = (k % 2 ? -1.0 : 1.0) * src[N - 1];
+4334:                 for (int j = 0; j < N - 1; ++j) sum += 2 * (double)src[j] * sin(phase * (j + 1.0));
+4335:             } else {
+4336:                 sum = src[0];
+4337:                 for (int j = 1; j < N; ++j) sum += 2 * (double)src[j] * cos(phase * j);
+4338:             }
+4339:         }
+4340:         y[k] = (notorious_fft_real)sum;
+4341:     }
+4342: }
+
+4386: void notorious_fft_dct2(notorious_fft_real* x, notorious_fft_real* y, const notorious_fft_aux* a) {
+4387:     if (!a || !x || !y) return;
+4388:     if (a->direct_r2r) { notorious_fft_direct_t2t3(x, y, a, 0, 0); return; }
+4389:     if (a->plan) {
+4390:         int N = a->N;
+
+4524: void notorious_fft_dct3(notorious_fft_real* x, notorious_fft_real* y, const notorious_fft_aux* a) {
+4525:     if (!a || !x || !y) return;
+4526:     if (a->direct_r2r) { notorious_fft_direct_t2t3(x, y, a, 1, 0); return; }
+4527:     if (a->plan) {
+4528:         notorious_fft_s_dct3_1d(x, y, a);
+4529:     } else if (a->sub2) {
+4530:         notorious_fft_apply_mdrx(x, y, a, notorious_fft_dct3);
+4531:     } else {
+
+5042: notorious_fft_aux* notorious_fft_mkaux_t2t3_1d(int N) {
+5043:     size_t bytes;
+5044:     if (N <= 0 || !notorious_fft_size_mul((size_t)N, sizeof(notorious_fft_real), &bytes)) return NULL;
+5045:     if (N == 1 || (N & (N - 1))) {
+5046:         notorious_fft_aux *direct = (notorious_fft_aux*)calloc(1, sizeof(*direct));
+5047:         if (!direct) return NULL;
+5048:         direct->N = N;
+5049:         direct->direct_r2r = 1;
+5050:         direct->scratch_im = (notorious_fft_real*)notorious_fft_malloc(bytes);
+5051:         if (!direct->scratch_im) { notorious_fft_free_aux(direct); return NULL; }
+5052:         return direct;
+5053:     }
+5054:     size_t scratch_bytes;
+5055:     if (!notorious_fft_size_mul((size_t)N + 1, 2 * sizeof(notorious_fft_real), &scratch_bytes)) return NULL;
+
+5661: void notorious_fft_execute_r2r(const notorious_fft_io_plan *p, notorious_fft_real *in, notorious_fft_real *out) {
+5662:     if (!p || p->kind != NOTORIOUS_FFT_IO_R2R || !in || !out) return;
+5663:     int last = p->rank - 1;
+5664:     size_t stride = (size_t)p->n[last];
+5665:     /* Transform contiguous rows directly into output. Only exact aliasing
+5666:      * needs an input copy; kernels always receive disjoint input and output. */
+5667:     for (size_t base = 0; base < p->r2r_count; base += stride) {
+5668:         notorious_fft_real *src = in + base;
+5669:         if (in == out) {
+5670:             memcpy(p->axis_in, src, stride * sizeof(*src));
+5671:             src = p->axis_in;
+5672:         }
+5673:         notorious_fft_execute_axis(p->r2r_kind[last], p->axis_aux[last], src, out + base);
+5674:     }
+5675:     /* Gather complete strided lines before scattering into the same tensor. */

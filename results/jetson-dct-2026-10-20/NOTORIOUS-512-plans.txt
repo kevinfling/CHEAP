@@ -1,0 +1,3 @@
+backend=NOTORIOUS n=512 rho=0.98999999999999999 planner=FFTW_ESTIMATE
+DCT-II/REDFT10: rank=1 n=512 flags=64 r2r_kind=5 in_place=1 axis_N=512 direct_r2r=0 fft_present=1 fft_n=256 mixed_radix=0 bluestein_n=0 rader_active=0
+DCT-III/REDFT01: rank=1 n=512 flags=64 r2r_kind=4 in_place=1 axis_N=512 direct_r2r=0 fft_present=1 fft_n=256 mixed_radix=0 bluestein_n=0 rader_active=0

@@ -1,0 +1,1634 @@
+[
+  {
+    "backend": "FFTW3",
+    "n": 256,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+      "256",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/FFTW3-256"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:29.088412+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46437"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "48031"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45968"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46812"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45375"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "48031"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.036435312998946756,
+    "after": {
+      "utc": "2026-10-21T06:04:29.127713+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47812"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46000"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46718"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45406"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47812"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 256,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+      "256",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/NOTORIOUS-256"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:29.134416+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46218"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47593"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45875"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45500"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47812"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.03414071899896953,
+    "after": {
+      "utc": "2026-10-21T06:04:29.170588+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46500"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47968"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46031"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46687"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45406"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47968"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "FFTW3",
+    "n": 257,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+      "257",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/FFTW3-257"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:29.177157+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46500"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47718"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45968"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46812"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45406"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47906"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.039644108997890726,
+    "after": {
+      "utc": "2026-10-21T06:04:29.218807+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47718"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46062"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46812"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45375"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47718"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 257,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+      "257",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/NOTORIOUS-257"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:29.225465+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47656"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45968"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45500"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47750"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.4630942179937847,
+    "after": {
+      "utc": "2026-10-21T06:04:29.690568+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46343"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47781"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45968"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45468"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47781"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "FFTW3",
+    "n": 258,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+      "258",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/FFTW3-258"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:29.698232+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46187"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47687"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45968"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46812"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45531"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47750"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.03814281699305866,
+    "after": {
+      "utc": "2026-10-21T06:04:29.738589+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46500"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47656"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46062"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46843"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45500"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47656"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 258,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+      "258",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/NOTORIOUS-258"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:29.745857+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47687"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45937"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45562"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47687"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.4637367319955956,
+    "after": {
+      "utc": "2026-10-21T06:04:30.211627+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47812"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45937"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45500"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47812"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "FFTW3",
+    "n": 511,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+      "511",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/FFTW3-511"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:30.219596+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47718"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46062"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45343"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47718"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.10995536399423145,
+    "after": {
+      "utc": "2026-10-21T06:04:30.331627+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47812"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46031"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "47031"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45406"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "48062"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 511,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+      "511",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/NOTORIOUS-511"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:30.340055+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46125"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47781"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45843"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46812"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45437"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "48000"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 1.7619165259966394,
+    "after": {
+      "utc": "2026-10-21T06:04:32.104073+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46312"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "48156"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46031"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "47000"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45437"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "48156"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "FFTW3",
+    "n": 512,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+      "512",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/FFTW3-512"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:32.114686+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46156"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47812"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46031"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46875"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45500"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47812"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.106451168001513,
+    "after": {
+      "utc": "2026-10-21T06:04:32.223204+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46437"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47781"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46093"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "47125"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45531"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47781"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 512,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+      "512",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/NOTORIOUS-512"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:32.231451+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46250"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47750"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "45875"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46906"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45562"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47750"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.10369316900323611,
+    "after": {
+      "utc": "2026-10-21T06:04:32.337164+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46437"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "48156"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46000"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "47031"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45468"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "48156"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "FFTW3",
+    "n": 513,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+      "513",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/FFTW3-513"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:32.346042+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46250"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "48125"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46062"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46906"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45593"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47812"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.10873497699503787,
+    "after": {
+      "utc": "2026-10-21T06:04:32.456822+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46437"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47781"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46062"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46906"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45500"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47875"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 513,
+    "rho": 0.99,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+      "513",
+      "/home/damus/Projects/CHEAP/results/jetson-dct-2026-10-20/NOTORIOUS-513"
+    ],
+    "before": {
+      "utc": "2026-10-21T06:04:32.465794+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46250"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47812"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46000"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "47000"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45562"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47812"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 1.773405523999827,
+    "after": {
+      "utc": "2026-10-21T06:04:34.241248+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": "46687"
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": "47781"
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "millidegrees_c": {
+            "unavailable": "[Errno 11] Resource temporarily unavailable"
+          }
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": "46062"
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": "46968"
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": "45468"
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": "47781"
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "validation": "passed"
+  }
+]

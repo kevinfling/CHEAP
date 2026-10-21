@@ -1,0 +1,32 @@
+{
+  "FFTW3": {
+    "binary": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+    "binary_sha256": "47f82c13ae432db8cfeaa7242ccecfd3fa8ed4eec41c1e12d42be77782eb25ee",
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"FFTW3\\\" -I/home/damus/Projects/CHEAP/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -c /home/damus/Projects/CHEAP/bench/bench_preconditioner.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_preconditioner.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -o cheap_bench_preconditioner  /usr/lib/aarch64-linux-gnu/libfftw3.so -lm \n"
+  },
+  "NOTORIOUS": {
+    "binary": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_preconditioner",
+    "binary_sha256": "98bb2290e1a164e599acfa525a06e73656fb5c86d6db02b6df068c81efe22e79",
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_USE_NOTORIOUS_FFT=1 -isystem /home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -std=c99 -o CMakeFiles/cheap_fft_backend.dir/src/cheap_notorious_fft.c.o -c /home/damus/Projects/CHEAP/src/cheap_notorious_fft.c",
+        "file": "/home/damus/Projects/CHEAP/src/cheap_notorious_fft.c"
+      },
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"NOTORIOUS\\\" -DCHEAP_USE_NOTORIOUS_FFT=1 -I/home/damus/Projects/CHEAP/include -isystem /home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -c /home/damus/Projects/CHEAP/bench/bench_preconditioner.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_preconditioner.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -o cheap_bench_preconditioner  libcheap_fft_backend.a -lm \n",
+    "dependency_commit": "681ae621f51731f84cded6872dcb1f1082105168"
+  }
+}

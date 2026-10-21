@@ -152,3 +152,22 @@ All times are median wall time in ms (1000 iterations). The `cntvct_el0` timer r
 **NEON speedup (`biharmonic_ev` vs `heat_ev` per element):** 0.278 ms vs 0.546 ms at N=65,536 → ~2.0× faster despite similar element count, confirming NEON vectorization is effective.
 
 **Regression baseline:** if `biharmonic_ev` exceeds 0.40 ms at N=65,536 on this board, check that `-march=native` enables NEON and that `CHEAP_SIMD_DISABLE` is not set.
+
+
+## Focused DCT preconditioner investigation
+
+The [isolated application/stage report](results/jetson-dct-2026-10-20/README.md)
+measures N=256, 257, 258, 511, 512 and 513 with both backends and
+`FFTW_ESTIMATE`, including selected plans. All 12 cases / 3,444 calls passed
+independent output checks. The runtime Notorious plans select `direct_r2r=1`
+at every tested non-power-of-two length; the pinned source implements that
+path as quadratic cosine sums. The isolated DCT-II/III timings account for
+nearly all of the observed slow preconditioner application.
+
+At N=257, standalone Notorious preconditioning takes 3.452 ms versus
+0.016449 ms for FFTW3; at N=256 the corresponding medians are
+0.005441 / 0.004960 ms. The library and FFT backend algorithms remain unchanged.
+The new `cheap_bench_preconditioner` target is enabled by the existing
+`CHEAP_BUILD_EVIDENCE_BENCH` option; `bench/run_preconditioner_sweep.py` captures
+the sequential sweep, raw calls, plan diagnostics and provenance. See the
+report for build commands, stage timing boundaries and interpretation limits.
