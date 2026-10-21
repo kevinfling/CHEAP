@@ -96,7 +96,7 @@ static inline cheap_pcg_result cheap_pcg_solve(
 {
     cheap_pcg_result out={0, NAN,NAN,CHEAP_PCG_INVALID,0,0,0};
     double bn=0,rn=0,limit=0,rho=0;
-    int n,rc,iteration;
+    int n,rc,iteration,restart=1;
     if(!A || !A->apply || !A->context || !w || !b || !x ||
        A->n<1 || w->n!=A->n || !w->r || !w->z || !w->p || !w->Ap ||
        (Minv && (!Minv->apply || !Minv->context || Minv->n!=A->n)) ||
@@ -135,13 +135,14 @@ static inline cheap_pcg_result cheap_pcg_solve(
         } else memcpy(w->z,w->r,(size_t)n*sizeof(double));
         double next_rho=cheap_pcg_dot(n,w->r,w->z);
         if(!isfinite(next_rho) || next_rho<=0) {out.reason=CHEAP_PCG_BREAKDOWN;break;}
-        if(iteration==0 || iteration%refresh_every==0) {
+        if(restart) {
             memcpy(w->p,w->z,(size_t)n*sizeof(double));
         } else {
             double beta=next_rho/rho;
             if(!isfinite(beta)) {out.reason=CHEAP_PCG_BREAKDOWN;break;}
             for(int i=0;i<n;++i)w->p[i]=w->z[i]+beta*w->p[i];
         }
+        restart=0;
         rho=next_rho;
         rc=cheap_linear_operator_apply(A,w->p,w->Ap);
         ++out.operator_calls;
@@ -158,24 +159,15 @@ static inline cheap_pcg_result cheap_pcg_solve(
         if(out.iterations%refresh_every==0) {
             rc=cheap_pcg_recompute(A,b,x,w,&out,&rn);
             if(rc!=CHEAP_PCG_CONVERGED) {out.reason=(cheap_pcg_reason)rc;break;}
+            restart=1;
         } else rn=cheap_pcg_norm(n,w->r);
         if(!isfinite(rn)) {out.reason=CHEAP_PCG_BREAKDOWN;break;}
         if(rn<=limit) {
             rc=cheap_pcg_recompute(A,b,x,w,&out,&rn);
             if(rc!=CHEAP_PCG_CONVERGED) {out.reason=(cheap_pcg_reason)rc;break;}
             if(rn<=limit) {out.reason=CHEAP_PCG_CONVERGED;break;}
-            /* Recursive estimate was optimistic: restart next iteration. */
-            iteration=out.iterations-1;
-            rho=0;
-            /* Force restart by recomputing z,p in next pass. */
-            if(Minv) {
-                rc=cheap_linear_operator_apply(Minv,w->r,w->z);
-                ++out.preconditioner_calls;
-                if(rc!=CHEAP_OK) {out.callback_status=rc;out.reason=CHEAP_PCG_OPERATOR_ERROR;break;}
-            } else memcpy(w->z,w->r,(size_t)n*sizeof(double));
-            rho=cheap_pcg_dot(n,w->r,w->z);
-            if(!isfinite(rho) || rho<=0) {out.reason=CHEAP_PCG_BREAKDOWN;break;}
-            memcpy(w->p,w->z,(size_t)n*sizeof(double));
+            /* Recursive estimate was optimistic: restart with true r. */
+            restart=1;
         }
     }
     /* Termination always reports a newly evaluated true residual. */
