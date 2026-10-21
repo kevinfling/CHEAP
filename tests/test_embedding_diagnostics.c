@@ -65,6 +65,20 @@ int main(void) {
        s.info.status!=CHEAP_EMBED_APPROX_CLIP ||s.info.neg_count==0)return 4;
     if(cheap_circulant_sampler_draw(&s,z,out)!=CHEAP_OK)return 5;
     cheap_circulant_sampler_destroy(&s);
+    /* Doubling a zero-padded embedding retains the old Fourier nodes:
+     * a negative eigenvalue cannot disappear through zero-padding alone. */
+    if(cheap_circulant_sampler_init_search(&s,bad,2,16,1e-12,0)!=CHEAP_EDOM ||
+       s.info.status!=CHEAP_EMBED_NOT_PSD ||s.info.L!=16 ||
+       s.time||s.inverse)return 9;
+    memset(&s,0,sizeof(s));
+    if(cheap_circulant_sampler_init_search(&s,bad,2,2,1e-12,0)!=CHEAP_EINVAL)
+        return 10;
+    {double nan_lags[]={1.,NAN};
+     if(cheap_circulant_sampler_init(&s,nan_lags,2,0,1e-12,0)!=CHEAP_EDOM)
+         return 11;
+     if(cheap_circulant_sampler_init(&s,bad,(size_t)INT_MAX,0,1e-12,0)
+        !=CHEAP_EINVAL)return 12;
+    }
     double weights[]={1.,2.,4.};
     cheap_spectral_diag d;
     if(cheap_diag_from_weights(weights,3,&d)!=CHEAP_OK ||
