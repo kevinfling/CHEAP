@@ -1,0 +1,1454 @@
+[
+  {
+    "backend": "FFTW3",
+    "n": 17,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+      "17"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:14.678571+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45625
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 46968
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45281
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46062
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44718
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47062
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.05766169700655155,
+    "after": {
+      "utc": "2026-10-21T05:28:14.740807+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45750
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47187
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45250
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46062
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44718
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47187
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "FFTW3",
+    "n": 64,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+      "64"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:14.744871+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45750
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 46875
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45281
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46125
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44656
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 46875
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.11411350600246806,
+    "after": {
+      "utc": "2026-10-21T05:28:14.861909+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45687
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47343
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45281
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46031
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44625
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47093
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "FFTW3",
+    "n": 257,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+      "257"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:14.866322+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45656
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47312
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45312
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 45968
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44625
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47312
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.8801475410000421,
+    "after": {
+      "utc": "2026-10-21T05:28:15.749769+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45750
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 46906
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45375
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46125
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44750
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 46906
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "FFTW3",
+    "n": 512,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+      "512"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:15.754993+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45593
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47156
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45343
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46000
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44781
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47156
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.9113058290095069,
+    "after": {
+      "utc": "2026-10-21T05:28:16.669609+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 46093
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47343
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45281
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46000
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44750
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47125
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "FFTW3",
+    "n": 1024,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+      "1024"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:16.674588+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45718
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47125
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45343
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46156
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44843
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47343
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 1.8970379710081033,
+    "after": {
+      "utc": "2026-10-21T05:28:18.575088+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45750
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47187
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45343
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46156
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44781
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47187
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "FFTW3",
+    "n": 4096,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+      "4096"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:18.580816+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45875
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47031
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45437
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46343
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44750
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47031
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 7.56091598799685,
+    "after": {
+      "utc": "2026-10-21T05:28:26.144817+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45937
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47437
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45437
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46312
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44968
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47187
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 17,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+      "17"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:26.150284+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45937
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47187
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45468
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46312
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44968
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47375
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.05872553501103539,
+    "after": {
+      "utc": "2026-10-21T05:28:26.212240+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 46093
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47531
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45468
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46375
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44906
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47312
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 64,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+      "64"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:26.217382+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45968
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47468
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45375
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46250
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44937
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47468
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.11668285499035846,
+    "after": {
+      "utc": "2026-10-21T05:28:26.337045+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45937
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47250
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45406
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46312
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44906
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47250
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 257,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+      "257"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:26.342645+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 46093
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47343
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45531
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46468
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44812
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47625
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.9035147649992723,
+    "after": {
+      "utc": "2026-10-21T05:28:27.249204+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 46218
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47343
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45437
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46250
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44906
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47156
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 512,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+      "512"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:27.255235+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45937
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47406
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45468
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46312
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44812
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47406
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 0.9364671170042129,
+    "after": {
+      "utc": "2026-10-21T05:28:28.194742+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45718
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47343
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45468
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46281
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 45031
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47250
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 1024,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+      "1024"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:28.200890+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45718
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47312
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45468
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46375
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 45031
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47312
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 1.9533873019972816,
+    "after": {
+      "utc": "2026-10-21T05:28:30.157262+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45656
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47593
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45437
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46343
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44968
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47281
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  },
+  {
+    "backend": "NOTORIOUS",
+    "n": 4096,
+    "command": [
+      "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+      "4096"
+    ],
+    "before": {
+      "utc": "2026-10-21T05:28:30.164045+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 45875
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47531
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45593
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46500
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 44906
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47531
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    },
+    "exit_status": 0,
+    "stderr": "",
+    "elapsed_seconds": 7.6728771760099335,
+    "after": {
+      "utc": "2026-10-21T05:28:37.839979+00:00",
+      "thermal": {
+        "thermal_zone0": {
+          "type": "cpu-thermal",
+          "millidegrees_c": 46093
+        },
+        "thermal_zone1": {
+          "type": "gpu-thermal",
+          "millidegrees_c": 47687
+        },
+        "thermal_zone2": {
+          "type": "cv0-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone3": {
+          "type": "cv1-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone4": {
+          "type": "cv2-thermal",
+          "unavailable": "can't concat NoneType to bytes"
+        },
+        "thermal_zone5": {
+          "type": "soc0-thermal",
+          "millidegrees_c": 45718
+        },
+        "thermal_zone6": {
+          "type": "soc1-thermal",
+          "millidegrees_c": 46406
+        },
+        "thermal_zone7": {
+          "type": "soc2-thermal",
+          "millidegrees_c": 45062
+        },
+        "thermal_zone8": {
+          "type": "tj-thermal",
+          "millidegrees_c": 47437
+        }
+      },
+      "cpufreq": {
+        "policy0": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        },
+        "policy4": {
+          "scaling_governor": "schedutil",
+          "scaling_min_freq": "1497600",
+          "scaling_max_freq": "1497600",
+          "scaling_cur_freq": "1497600"
+        }
+      }
+    }
+  }
+]

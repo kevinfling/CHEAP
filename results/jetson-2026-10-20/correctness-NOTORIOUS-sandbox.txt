@@ -1,0 +1,37 @@
+Internal ctest changing into directory: /home/damus/Projects/CHEAP/build-jetson-asan-NOTORIOUS
+Test project /home/damus/Projects/CHEAP/build-jetson-asan-NOTORIOUS
+    Start 6: embedding_diagnostics
+1/4 Test #6: embedding_diagnostics ............***Failed    0.29 sec
+==154==LeakSanitizer has encountered a fatal error.
+==154==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==154==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+    Start 7: pcg_contract
+2/4 Test #7: pcg_contract .....................***Failed    0.03 sec
+==156==LeakSanitizer has encountered a fatal error.
+==156==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==156==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+    Start 8: pcg
+3/4 Test #8: pcg ..............................***Failed    0.02 sec
+==158==LeakSanitizer has encountered a fatal error.
+==158==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==158==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+    Start 9: toeplitz_operator
+4/4 Test #9: toeplitz_operator ................***Failed    0.04 sec
+==160==LeakSanitizer has encountered a fatal error.
+==160==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==160==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+
+0% tests passed, 4 tests failed out of 4
+
+Total Test time (real) =   0.39 sec
+
+The following tests FAILED:
+	  6 - embedding_diagnostics (Failed)
+	  7 - pcg_contract (Failed)
+	  8 - pcg (Failed)
+	  9 - toeplitz_operator (Failed)
+Errors while running CTest
