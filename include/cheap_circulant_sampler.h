@@ -95,7 +95,12 @@ static inline int cheap_circulant_sampler_init_mode(
     t.info.status=CHEAP_EMBED_EXACT;
     if(t.info.min_eig < -threshold) {
         t.info.status=allow_approx?CHEAP_EMBED_APPROX_CLIP:CHEAP_EMBED_NOT_PSD;
-        if(!allow_approx){*s=t;cheap_circulant_sampler_destroy(s);return CHEAP_EDOM;}
+        if(!allow_approx){
+            cheap_embedding_info rejected=t.info;
+            cheap_circulant_sampler_destroy(&t);
+            s->info=rejected;
+            return CHEAP_EDOM;
+        }
     }
     for(k=0;k<bins;++k){
         double v=fmax(0.,t.freq[k][0]);
