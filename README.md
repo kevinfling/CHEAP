@@ -2,9 +2,9 @@
 
 **Circulant Hessian Efficient Algorithm Package:** a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices. Supports 1D, 2D, and 3D grids via separable DCT diagonalization.
 
-CHEAP turns cubic-time kernel methods into fast spectral operations by exploiting the fact that stationary covariance matrices (Toeplitz) diagonalize in the DCT-II basis. One forward DCT, one pointwise multiply, one inverse DCT: that's the entire algorithm for kernel regression, optimal transport, Gaussian sampling, control, and fractional calculus.
+CHEAP organizes structured numerical methods around a reusable DCT-II spectral primitive. DCT-diagonal operators are applied exactly in their chosen transform algebra; generic Toeplitz matrices and finite-grid fractional Brownian covariance matrices are **not** exactly DCT-diagonal. For those problems, DCT spectra are approximations or preconditioners, and accuracy must be checked against the original operator.
 
-On N=65,536 problems, CHEAP delivers 400-1000x speedups over Cholesky/LAPACK baselines using O(N) memory.
+Reported benchmark speedups depend on the operator, approximation error, and baseline; see [BENCH.md](BENCH.md) and the [research validation protocol](docs/PRACTITIONER_VALIDATION_PROTOCOL.md). DCT surrogate solves should not be described as exact solutions to arbitrary Toeplitz systems.
 
 ## How It Works
 
@@ -23,7 +23,7 @@ The choice of weight vector determines the operation:
 | Sinkhorn optimal transport | `exp(-lambda[k] / eps)` | O(N log N) / iter |
 | LQR / Tikhonov control | `1 / (lambda[k] + R)` | O(N log N) |
 | Fractional differentiation | `(2 sin(w_k/2))^d` | O(N log N) |
-| Toeplitz matvec / solve | `DCT(first_col)[k]` | O(N log N) |
+| Toeplitz DCT surrogate apply / solve | `diag(Q T Qᵀ)[k]` | O(N log N) after projection setup; approximate for generic Toeplitz T |
 | Kalman prediction | `P[k] + lambda[k]` | O(N) |
 | Wiener filter | `lk / (lk + sigma^2)` | O(N log N) |
 | Wiener deconvolution | `lk_psf / (lk_psf² + noise_power)` | O(N log N) |
@@ -40,7 +40,7 @@ The choice of weight vector determines the operation:
 | Poisson inverse | `1 / (μ[k] + ε)`, DC=0 | O(N) |
 | Higher-order Tikhonov deconv | `ψ[k] / (ψ[k]² + α·μ[k]^p + ε)` | O(N) |
 
-The eigenvalues `lambda[k]` come from Flandrin's wavelet variance formula for fractional Brownian motion, precomputed once during `cheap_init`. See [CHEAP.md](CHEAP.md) for the full mathematical treatment.
+The default `cheap_init` constructs a Flandrin-inspired spectral **model** for fractional Brownian motion; these weights are not the exact eigenvalues of a finite fBm covariance matrix. Other constructors accept user-provided spectra or compute DCT-diagonal surrogates. See [CHEAP.md](CHEAP.md) for the mathematical discussion and its assumptions.
 
 ## Quick Start
 
@@ -122,7 +122,7 @@ cheap_destroy(&ctx);
 
 ### Gaussian Process Sampling
 
-Sample from a GP posterior with fBm covariance in O(N log N) — no Cholesky required:
+Sample from CHEAP's DCT-diagonal Gaussian **surrogate** in O(N log N) — not an exact finite-grid fBm posterior:
 
 ```c
 cheap_ctx ctx;
@@ -132,28 +132,29 @@ double eps[8192], sample[8192];
 /* fill eps with standard normal draws */
 
 cheap_apply(&ctx, eps, ctx.sqrt_lambda, sample);
-/* sample ~ N(0, K) where K is the fBm covariance */
+/* sample covariance is the DCT-diagonal spectral model, not exact finite-grid fBm covariance */
 
 cheap_destroy(&ctx);
 ```
 
 ### Toeplitz System Solve
 
-Solve a regularized Toeplitz system `(T + lambda*I)x = y` for any symmetric Toeplitz matrix:
+Apply the inverse of a regularized **DCT-diagonal Toeplitz surrogate**. For the original Toeplitz system, use this as a preconditioner in an iterative solver and check its true residual:
 
 ```c
-cheap_ctx ctx;
-cheap_init(&ctx, 2048, 0.5);
+cheap_ctx ctx = {0};
+double t[2048];       /* populate with a valid SPD Toeplitz first column */
+double y[2048], x[2048]; /* populate y with the right-hand side */
 
-double t[2048];   /* first column of Toeplitz matrix */
-double lam[2048]; /* eigenvalues (output) */
-cheap_toeplitz_eigenvalues(&ctx, t, lam);
-
-double y[2048], x[2048];
-cheap_toeplitz_solve_precomp(&ctx, lam, y, /*reg=*/1e-4, x);
-/* x = (T + 1e-4 * I)^{-1} y */
-
-cheap_destroy(&ctx);
+int rc = cheap_init_from_toeplitz_projection(&ctx, 2048, t);
+if (rc == CHEAP_OK) {
+    rc = cheap_toeplitz_solve_precomp(&ctx, ctx.lambda, y, 1e-4, x);
+    /* x solves the DCT surrogate, not the original Toeplitz system.
+       To solve the original system, use this as a preconditioner
+       and check the true residual of the Toeplitz equation. */
+    cheap_destroy(&ctx);
+}
+/* Check rc and handle errors. */
 ```
 
 More examples in [`examples/`](examples/): GP regression, optimal transport, LQR/MPC control, fractional calculus, Poisson solver (2D/3D), Navier-Stokes dissipation (2D/3D), online kernel filtering, Wiener denoising (2D), RMT denoising, GP regression (2D), Toeplitz solve (2D).
@@ -171,7 +172,7 @@ The API has three layers:
 
 **3. Algorithms** — built on the primitives:
 - `cheap_sinkhorn` — entropic optimal transport
-- `cheap_toeplitz_eigenvalues` / `cheap_toeplitz_solve_precomp` — generic Toeplitz operations
+- `cheap_toeplitz_eigenvalues` / `cheap_toeplitz_solve_precomp` — legacy DCT surrogate operations; `cheap_init_from_toeplitz_projection` computes a Frobenius-optimal surrogate
 - `cheap_rff_init` / `cheap_rff_map` — random Fourier features for kernel approximation
 
 **4. Spectral weight constructors** — compute weight vectors for `cheap_apply`:

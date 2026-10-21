@@ -27,11 +27,11 @@ This paper introduces CHEAP, built on three pillars:
 
 ### 2.1 The Discrete Cosine Transform (DCT)
 
-The DCT-II of a vector x ∈ ℝⁿ is defined by the unitary matrix **C** whose entries are:
+We use the **orthonormal DCT-II** matrix **C**, for indices $0 \le k,i < n$:
 
-$$C_{k,i} = \cos\left(\frac{\pi k (2i+1)}{2n}\right)$$
+$C_{k,i} = \alpha_k\cos\left(\frac{\pi k (2i+1)}{2n}\right),\qquad \alpha_0=\frac{1}{\sqrt n},\quad \alpha_k=\sqrt{\frac{2}{n}}\ \ (k>0).$
 
-We denote the forward transform by x̂ = **C**x and the inverse by x = **C**ᵀx̂. The DCT acts as the Karhunen–Loève transform (KLT) for first-order Gauss–Markov processes and is the standard for frequency-domain analysis in signal processing.
+Thus $CC^\top=I$, the forward transform is $\hat x=Cx$, and its inverse is $x=C^\top\hat x$. FFTW's unnormalized REDFT10/REDFT01 routines require the corresponding normalization factors; they are not themselves orthonormal transforms. The DCT acts as the Karhunen–Loève transform (KLT) for first-order Gauss–Markov processes and is the standard for frequency-domain analysis in signal processing.
 
 ### 2.2 Discrete-Time Fractional Brownian Motion (dfBm)
 
