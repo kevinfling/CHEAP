@@ -55,8 +55,8 @@ static int one(int n,int toeplitz,int preconditioned) {
     dense_ctx d={n,a};
     int fail=1;
     if(!a||!c||!b||!x||!expected)goto end;
+    for(int i=0;i<n;++i) c[i]=pow(.15,(double)i);
     for(int i=0;i<n;++i) {
-        c[i]=pow(.15,(double)i);
         b[i]=sin(i+1.)+0.5;
         for(int j=0;j<n;++j)
             a[i*n+j]=toeplitz?c[abs(i-j)]:(i==j?2.+i*.1:0.);
