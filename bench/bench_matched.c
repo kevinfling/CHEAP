@@ -16,7 +16,29 @@
 #define CHEAP_BENCH_BACKEND "FFTW3"
 #endif
 #define RUNS 40
+#define COV_DRAWS 12000
 static volatile double sink=0;
+static unsigned long long rng_state=0x9e3779b97f4a7c15ULL;
+static double normal_sample(void) {
+    rng_state^=rng_state>>12;rng_state^=rng_state<<25;rng_state^=rng_state>>27;
+    unsigned long long a=rng_state*2685821657736338717ULL;
+    double u=((a>>11)+0.5)*0x1.0p-53;
+    rng_state^=rng_state>>12;rng_state^=rng_state<<25;rng_state^=rng_state>>27;
+    unsigned long long b=rng_state*2685821657736338717ULL;
+    double v=((b>>11)+0.5)*0x1.0p-53;
+    return sqrt(-2*log(u))*cos(6.2831853071795864769*v);
+}
+static double dense_error(int n,const double *c,const double *x,const double *y) {
+    long double num=0,den=0;
+    for(int i=0;i<n;++i) {
+        long double expected=0;
+        for(int j=0;j<n;++j)expected+=(long double)c[abs(i-j)]*x[j];
+        long double e=expected-y[i];
+        num+=e*e;den+=expected*expected;
+    }
+    return (double)sqrtl(num/(den>0?den:1));
+}
+
 static double clock_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC,&ts);
@@ -78,7 +100,9 @@ int main(int argc,char **argv) {
         samples[k]=clock_ms()-t;
         sink+=y[k%n];
     }
-    emit("toeplitz_fft","toeplitz_fft_apply",n,setup,first,samples,0,NAN,NAN,0,"none");
+    double matvec_error=n<=1024?dense_error(n,col,b,y):NAN;
+    if(n<=1024 && (!isfinite(matvec_error)||matvec_error>1e-10))return 15;
+    emit("toeplitz_fft","toeplitz_fft_apply",n,setup,first,samples,0,matvec_error,NAN,0,"none");
     cheap_pcg_workspace w={0};
     t=clock_ms();
     if(cheap_pcg_workspace_init(&w,n)!=CHEAP_OK)return 7;
@@ -116,8 +140,21 @@ int main(int argc,char **argv) {
         samples[k]=clock_ms()-t;
         sink+=y[k%n];
     }
+    /* Separate seeded covariance check; timed FFT calls exclude RNG. */
+    long double m0=0,m1=0,c0=0,c1=0;
+    for(int j=0;j<COV_DRAWS;++j) {
+        for(size_t i=0;i<s.info.L;++i)z[i]=normal_sample();
+        if(cheap_circulant_sampler_draw(&s,z,y)!=CHEAP_OK)return 17;
+        m0+=y[0];m1+=y[1];c0+=(long double)y[0]*y[0];
+        c1+=(long double)y[0]*y[1];
+    }
+    long double e0=c0/COV_DRAWS-(m0/COV_DRAWS)*(m0/COV_DRAWS)-col[0];
+    long double e1=c1/COV_DRAWS-(m0/COV_DRAWS)*(m1/COV_DRAWS)-col[1];
+    double covariance_error=(double)sqrtl((e0*e0+e1*e1)/
+                                           (col[0]*col[0]+col[1]*col[1]));
+    if(!isfinite(covariance_error)||covariance_error>0.12)return 18;
     emit("circulant","psd_embedding_draw_fft_only",n,setup,first,samples,
-         0,NAN,NAN,0,"none");
+         0,NAN,covariance_error,0,"none");
     cheap_circulant_sampler_destroy(&s);
     cheap_pcg_workspace_destroy(&w);
     cheap_toeplitz_operator_destroy(&op);
