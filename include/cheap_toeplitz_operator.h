@@ -70,9 +70,10 @@ static inline int cheap_toeplitz_operator_init(
     if (!op || !first_column || n < 1) return CHEAP_EINVAL;
     if (op->time || op->frequency || op->kernel || op->forward || op->inverse)
         return CHEAP_EINVAL;
+    /* Reject impossible dimensions before reading caller-owned column data. */
+    if ((size_t)n > ((size_t)INT_MAX + 1u)/2u) return CHEAP_EINVAL;
     for (k = 0; k < (size_t)n; ++k)
         if (!isfinite(first_column[k])) return CHEAP_EDOM;
-    if ((size_t)n > ((size_t)INT_MAX + 1u)/2u) return CHEAP_EINVAL;
     required = (size_t)n * 2u - 1u;
     length = 1;
     while (length < required) {
