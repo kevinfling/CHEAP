@@ -1,4 +1,4 @@
-# CHEAP API Reference
+# Numerical accuracy and benchmark interpretation\n\n> **Operation and accuracy disclosure:** A DCT-diagonal application is a **surrogate apply**, not a solve of a generic Toeplitz system. Exact Toeplitz FFT matvec evaluates the original finite Toeplitz operator but is not itself a solve. Residual-controlled PCG solves the original SPD system only when its reported fresh true residual meets the requested tolerance. PSD-validated circulant draws are covariance-faithful only for an accepted embedding (within the documented eigenvalue tolerance). Positive DCT weights and a small surrogate residual do **not** imply a small residual on the original operator. See [benchmark protocol](BENCH.md#matched-accuracy-evidence-protocol).\n\nPCG API: [PCG contract](docs/PCG_CONTRACT.md); sampler API: [circulant sampling contract](docs/CIRCULANT_SAMPLING_DIAGNOSTICS.md). Every solve timing requires a fresh original-operator residual, and every covariance claim requires an explicit covariance check.\n\n# CHEAP API Reference
 
 Complete documentation for the CHEAP C99 and C++17 APIs.
 
