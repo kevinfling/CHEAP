@@ -1,0 +1,19 @@
+{
+  "bench/bench_matched.c": "b556add5fb47a4e1eb4ee5bdd85c28cfc4411e11e922ab315dec019a6649b5ee",
+  "bench/run_pcg_sweep.py": "a656997ee4c2349a479b40885492fa99a753437bd9ad06c6570f98ec88d8babc",
+  "tests/test_bench_evidence.py": "2e928da84aad7b4020cecc855738289ebce8c2756c044ff99789157f5aef51df",
+  "CMakeLists.txt": "105b6e324acdab8323f0225618c44f3f783cc8d0426b7c2ed319865d73c6c9ef",
+  "include/cheap.h": "42b696ccb1caff3119d4c2898d7e6da50d4e2c6168d0b09794ea123a62d8e04f",
+  "include/cheap.hpp": "52510b78375bce00347d85829db3b1b035076f689c22a8e2563d449878aa68e0",
+  "include/cheap_circulant_sampler.h": "6847d65aa7322616d11dda7cdab1db19e751f87391998f3b5d6d8ee00cbeeb66",
+  "include/cheap_gumbel_transport.h": "709807746d49521577e72760d755ef7e9f9db62873889c1f41c4725a69818c91",
+  "include/cheap_notorious_nd.h": "90445292ca309f2a676b5077192dd9c88ab6d56768f1eced3e9d0a10bb64338a",
+  "include/cheap_pcg.h": "25605cf107129a6dc58acfc2fa28e3332da6fc6431815c9b5ac0877cb992ab80",
+  "include/cheap_sinkhorn_divergence.h": "c5a57e3737b4a426b9c290ac276ba5aae2adc4b30bd61abaac134c0bbe91070e",
+  "include/cheap_spectral_diagnostics.h": "9f2be459b5e7c3c7cee56d0ec11a7f64f7fb756dc81b82e35ab669f790ba3d80",
+  "include/cheap_toeplitz_dct_diagonal.h": "a2ad5b5e87355e4cd5f29ae0667b5cb5cb0575e8344d886e70252ef5430f633a",
+  "include/cheap_toeplitz_operator.h": "a6536a3fc5678a85e1b5be2bc22ffb5586da54c909595e2da430eaf60f273493",
+  "include/cheap_transport.h": "63ca34b3e226007e10c1a2020bbf4e13570b37700d9a92e61fd627363f230b50",
+  "include/cheap_weights_verified.h": "d774f69338ce2928779d82b7565b96c8f13ce960aff29e8413f2adcccffcc154",
+  "src/cheap_notorious_fft.c": "25b41ff9d45578a8541880a9218dc62a46e4c367c7b2a77ebf8a58a711d6363d"
+}

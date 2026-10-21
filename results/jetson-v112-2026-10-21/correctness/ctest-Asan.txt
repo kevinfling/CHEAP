@@ -1,0 +1,34 @@
+Internal ctest changing into directory: /home/damus/Projects/CHEAP/build-jetson-v112-Asan
+Test project /home/damus/Projects/CHEAP/build-jetson-v112-Asan
+      Start  1: unit
+      Start  2: simd
+ 1/14 Test  #1: unit .............................   Passed    6.93 sec
+      Start  3: unit_2d
+ 2/14 Test  #2: simd .............................   Passed    6.98 sec
+      Start  4: unit_3d
+ 3/14 Test  #3: unit_2d ..........................   Passed    6.98 sec
+      Start  5: weights
+ 4/14 Test  #4: unit_3d ..........................   Passed    7.05 sec
+      Start  6: embedding_diagnostics
+ 5/14 Test  #5: weights ..........................   Passed    6.88 sec
+      Start  7: pcg_contract
+ 6/14 Test  #6: embedding_diagnostics ............   Passed    7.18 sec
+      Start  8: pcg
+ 7/14 Test  #7: pcg_contract .....................   Passed    6.90 sec
+      Start  9: toeplitz_operator
+ 8/14 Test  #8: pcg ..............................   Passed    6.90 sec
+      Start 10: toeplitz_projection
+ 9/14 Test  #9: toeplitz_operator ................   Passed    6.94 sec
+      Start 11: weights_verified
+10/14 Test #10: toeplitz_projection ..............   Passed    7.05 sec
+      Start 12: transport
+11/14 Test #11: weights_verified .................   Passed    6.88 sec
+      Start 13: transport_extensions
+12/14 Test #12: transport ........................   Passed    6.89 sec
+      Start 14: unit_cpp
+13/14 Test #13: transport_extensions .............   Passed    6.89 sec
+14/14 Test #14: unit_cpp .........................   Passed    6.91 sec
+
+100% tests passed, 0 tests failed out of 14
+
+Total Test time (real) =  48.97 sec

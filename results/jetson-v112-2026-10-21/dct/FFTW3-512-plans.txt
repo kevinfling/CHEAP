@@ -1,0 +1,13 @@
+backend=FFTW3 n=512 rho=0.98999999999999999 planner=FFTW_ESTIMATE
+DCT-II/REDFT10: (redft10e-r2hc-512
+  (rdft-ct-dit/16
+    (hc2hc-direct-16/8 "hf2_16"
+      (rdft-r2hc-direct-r2c-16 "r2cf_16")
+      (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+    (rdft-r2hc-directbuf/34-r2c-32-x16 "r2cf_32")))
+DCT-III/REDFT01: (redft01e-r2hc-512
+  (rdft-ct-dit/16
+    (hc2hc-direct-16/8 "hf2_16"
+      (rdft-r2hc-direct-r2c-16 "r2cf_16")
+      (rdft-r2hc01-direct-r2c-16 "r2cfII_16"))
+    (rdft-r2hc-directbuf/34-r2c-32-x16 "r2cf_32")))

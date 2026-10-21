@@ -7,7 +7,7 @@ Architecture	AArch64 / Cortex-A78AE
 Compiler	GCC, same version for both backends
 Optimization	-O3 -DNDEBUG -march=native
 FFTW planning	FFTW_ESTIMATE
-Notorious-FFT	Pinned commit 681ae621
+Notorious-FFT	v1.1.2, pinned commit a9a48e61 (initial runs used 681ae621)
 Timing	40+ steady-state repetitions
 Accuracy	Identical true-residual and covariance targets
 Thermal/power state	Recorded and held as consistently as possible
@@ -133,7 +133,7 @@ the optional log records every first and steady solve. See [BENCH.md](BENCH.md)
 for CLI and CSV field definitions.
 
 
-## Focused DCT preconditioner investigation
+## Focused DCT preconditioner investigation (v1.1.1)
 
 The [isolated application/stage report](results/jetson-dct-2026-10-20/README.md)
 measures N=256, 257, 258, 511, 512 and 513 with both backends and
@@ -150,3 +150,27 @@ The new `cheap_bench_preconditioner` target is enabled by the existing
 `CHEAP_BUILD_EVIDENCE_BENCH` option; `bench/run_preconditioner_sweep.py` captures
 the sequential sweep, raw calls, plan diagnostics and provenance. See the
 report for build commands, stage timing boundaries and interpretation limits.
+
+
+## Notorious-FFT v1.1.2 evaluation — 2026-10-21
+
+The [release evaluation](results/jetson-v112-2026-10-21/README.md) repeats both
+sweeps with v1.1.2, measured at `a6f8d0e12920107f89558ab484071f8c6655841d`.
+CMake now pins `a9a48e61eee91ee7182a013c32a4cae0f64f6da3`, a documentation-only
+retag with identical numerical source and build inputs.
+The old non-power-of-two DCT fallback is replaced by FFT-backed runtime plans.
+At N=257, isolated preconditioning now takes 0.018208 ms; at rho=0.99, the full
+DCT-PCG solve takes 0.393837 ms versus 3.299063 ms for same-session CG.
+The 143 → 8 iteration reduction is preserved.
+
+The four awkward-size isolated applications improved approximately 190–435×
+relative to the archived v1.1.1 session. Fresh FFTW3 controls, complete per-call
+records and selected plans are retained. All 3,444 isolated calls, 2,952 solves,
+42 C/C++ tests in Debug/Asan/Ubsan and eight sanitizer harness cases passed.
+CHEAP numerical headers and the backend adapter were not modified.
+
+Use separate build/output directories as shown in the report to preserve the old
+backend and archived measurements. Historical v1.1.1 timing ratios are across
+sessions; current FFTW3 controls and paired solver comparisons share the new
+session. Performance parity with FFTW3 is not established, especially at
+N=511 and 513.

@@ -113,6 +113,9 @@ static void dump_plan(FILE *f,const char *name,fftw_plan plan) {
         "axis_N=%d direct_r2r=%d fft_present=%d",
         plan->rank,plan->n[0],plan->flags,(int)plan->r2r_kind[0],
         plan->in==plan->out,axis?axis->N:0,axis?axis->direct_r2r:-1,fft!=NULL);
+#if defined(NOTORIOUS_R2R_ALGO_DCT_FFT_N)
+    if(axis)fprintf(f," r2r_algo=%d",axis->r2r_algo);
+#endif
     if(fft)fprintf(f," fft_n=%zu mixed_radix=%d bluestein_n=%zu rader_active=%d",
         fft->n,fft->mixed_radix,fft->bluestein_n,fft->rader_sub!=NULL);
     fputc('\n',f);
@@ -190,6 +193,9 @@ int main(int argc,char **argv) {
     /* Inspect selected plans after timing; never print or plan in execute. */
     fprintf(plans,"backend=%s n=%d rho=%.17g planner=FFTW_ESTIMATE\n",
             CHEAP_BENCH_BACKEND,n,rho);
+#if defined(CHEAP_USE_NOTORIOUS_FFT)
+    fprintf(plans,"backend_version=%s\n",NOTORIOUS_FFT_VERSION_STRING);
+#endif
     dump_plan(plans,"DCT-II/REDFT10",ctx.plan_fwd);
     dump_plan(plans,"DCT-III/REDFT01",ctx.plan_inv);
     goto cleanup;

@@ -10,7 +10,27 @@ The opt-in `cheap_bench_evidence` harness measures setup, first execution, and 4
 
 The [2026-10-20 Jetson size sweep](results/jetson-2026-10-20/README.md) records both backends at N=17, 64, 257, 512, 1024 and 4096, including raw CSVs, accuracy checks, platform/build provenance and separate sanitizer validation. All twelve runs succeeded. FFTW3 had lower medians for all three operations at every size in that session; the results do not establish a dense/FFT crossover or a preconditioning speedup.
 
-### Stronger-correlation CG/DCT-PCG experiment
+### Notorious-FFT v1.1.2 follow-up
+
+The [2026-10-21 release evaluation](results/jetson-v112-2026-10-21/README.md)
+repeats both the isolated DCT and paired solver sweeps against v1.1.2
+(`a6f8d0e12920107f89558ab484071f8c6655841d`) with fresh FFTW3 controls.
+Runtime plans confirm FFT-backed DCTs at every tested size. At N=257,
+standalone Notorious preconditioning fell from the archived 3.451683 ms to
+0.018208 ms; rho=0.99 DCT-PCG fell from 27.809907 ms to 0.393837 ms, versus
+3.299063 ms for same-session CG. The new solver comparison gives 143 → 8
+iterations and an 8.38× steady-state solve-time ratio.
+
+All 3,444 isolated calls and 2,952 original-system solves passed their existing
+independent checks. All 42 C/C++ tests across Debug/Asan/Ubsan and eight dedicated
+sanitizer harness cases passed. CMake pins the documentation-only retag at
+`a9a48e61eee91ee7182a013c32a4cae0f64f6da3`; numerical code is identical to the
+benchmarked revision above. CHEAP numerical headers and the backend adapter
+are unchanged. The v1.1.1 reports
+below remain historical evidence of the old fallback. Old/new ratios compare
+separate sessions; the fresh FFTW3 and CG/DCT-PCG comparisons are same-session.
+
+### Stronger-correlation CG/DCT-PCG experiment (v1.1.1)
 
 The [2026-10-20 paired solver sweep](results/jetson-pcg-2026-10-20/README.md)
 repeats the six sizes for rho=0.3, 0.9 and 0.99, using both FFT backends.
@@ -73,7 +93,8 @@ cmake --build build-evidence-notorious --target cheap_bench_evidence
 ./build-evidence-notorious/cheap_bench_evidence 257 > evidence-notorious-257.csv
 ```
 
-Notorious-FFT is pinned in CMake at `681ae621f51731f84cded6872dcb1f1082105168`. FFTW planning uses `FFTW_ESTIMATE` in the relevant Toeplitz/sampler contexts. Record the local FFTW revision, compiler and flags, CPU, OS, precision, sanitizers, and commit SHA before publishing comparative results. Run correctness under Debug/ASan/UBSan separately from optimized timings. The CSV includes median, p95 and IQR over 40 timed calls after a first execution; it does not contain confidence intervals or cross-method matched-accuracy speedups.
+Notorious-FFT v1.1.2 is pinned in CMake at `a9a48e61eee91ee7182a013c32a4cae0f64f6da3` (documentation-only retag of the benchmarked `a6f8d0e`).
+The 2026-10-20 archived reports used v1.1.1 at `681ae621f51731f84cded6872dcb1f1082105168`. FFTW planning uses `FFTW_ESTIMATE` in the relevant Toeplitz/sampler contexts. Record the local FFTW revision, compiler and flags, CPU, OS, precision, sanitizers, and commit SHA before publishing comparative results. Run correctness under Debug/ASan/UBSan separately from optimized timings. The CSV includes median, p95 and IQR over 40 timed calls after a first execution; it does not contain confidence intervals or cross-method matched-accuracy speedups.
 
 ## Publication gate
 
@@ -154,7 +175,7 @@ All times are median wall time in ms (1000 iterations). The `cntvct_el0` timer r
 **Regression baseline:** if `biharmonic_ev` exceeds 0.40 ms at N=65,536 on this board, check that `-march=native` enables NEON and that `CHEAP_SIMD_DISABLE` is not set.
 
 
-## Focused DCT preconditioner investigation
+## Focused DCT preconditioner investigation (v1.1.1)
 
 The [isolated application/stage report](results/jetson-dct-2026-10-20/README.md)
 measures N=256, 257, 258, 511, 512 and 513 with both backends and

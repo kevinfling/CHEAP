@@ -1,0 +1,84 @@
+$ cmake -S . -B build-jetson-v112-Asan -G Unix Makefiles -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DCMAKE_C_FLAGS=-march=native -DCMAKE_CXX_FLAGS=-march=native -DCMAKE_BUILD_TYPE=Asan -DCHEAP_FFT_BACKEND=NOTORIOUS -DCHEAP_BUILD_CPP=ON -DCHEAP_BUILD_EVIDENCE_BENCH=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_SOURCE_DIR_NOTORIOUS_FFT=/home/damus/Projects/CHEAP/build-jetson-v112-NOTORIOUS/_deps/notorious_fft-src
+-- The C compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/damus/Projects/CHEAP/build-jetson-v112-Asan
+$ cmake --build build-jetson-v112-Asan --target test_cheap test_simd test_cheap_2d test_cheap_3d test_cheap_weights test_embedding_diagnostics test_pcg_contract test_pcg test_toeplitz_operator test_cheap_toeplitz_projection test_weights_verified test_transport test_transport_extensions test_cheap_cpp cheap_bench_preconditioner cheap_bench_evidence -j2
+[ 33%] Building C object CMakeFiles/cheap_fft_backend.dir/src/cheap_notorious_fft.c.o
+[ 66%] Linking C static library libcheap_fft_backend.a
+[ 66%] Built target cheap_fft_backend
+[ 66%] Building C object CMakeFiles/test_cheap.dir/tests/test_cheap.c.o
+[100%] Linking C executable test_cheap
+[100%] Built target test_cheap
+Consolidate compiler generated dependencies of target cheap_fft_backend
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_simd.dir/tests/test_simd.c.o
+[100%] Linking C executable test_simd
+[100%] Built target test_simd
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_cheap_2d.dir/tests/test_cheap_2d.c.o
+[100%] Linking C executable test_cheap_2d
+[100%] Built target test_cheap_2d
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_cheap_3d.dir/tests/test_cheap_3d.c.o
+[100%] Linking C executable test_cheap_3d
+[100%] Built target test_cheap_3d
+[ 66%] Built target cheap_fft_backend
+[100%] Building C object CMakeFiles/test_cheap_weights.dir/tests/test_cheap_weights.c.o
+[100%] Linking C executable test_cheap_weights
+[100%] Built target test_cheap_weights
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_embedding_diagnostics.dir/tests/test_embedding_diagnostics.c.o
+[100%] Linking C executable test_embedding_diagnostics
+[100%] Built target test_embedding_diagnostics
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_pcg_contract.dir/tests/test_pcg_contract.c.o
+[100%] Linking C executable test_pcg_contract
+[100%] Built target test_pcg_contract
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_pcg.dir/tests/test_pcg.c.o
+[100%] Linking C executable test_pcg
+[100%] Built target test_pcg
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_toeplitz_operator.dir/tests/test_toeplitz_operator.c.o
+[100%] Linking C executable test_toeplitz_operator
+[100%] Built target test_toeplitz_operator
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_cheap_toeplitz_projection.dir/tests/test_cheap_toeplitz_projection.c.o
+[100%] Linking C executable test_cheap_toeplitz_projection
+[100%] Built target test_cheap_toeplitz_projection
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_weights_verified.dir/tests/test_weights_verified.c.o
+[100%] Linking C executable test_weights_verified
+[100%] Built target test_weights_verified
+[ 66%] Built target cheap_fft_backend
+[ 66%] Building C object CMakeFiles/test_transport.dir/tests/test_transport.c.o
+[100%] Linking C executable test_transport
+[100%] Built target test_transport
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/test_transport_extensions.dir/tests/test_transport_extensions.c.o
+[100%] Linking C executable test_transport_extensions
+[100%] Built target test_transport_extensions
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building CXX object CMakeFiles/test_cheap_cpp.dir/tests/test_cheap_cpp.cpp.o
+[100%] Linking CXX executable test_cheap_cpp
+[100%] Built target test_cheap_cpp
+[ 66%] Built target cheap_fft_backend
+[100%] Building C object CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o
+[100%] Linking C executable cheap_bench_preconditioner
+[100%] Built target cheap_bench_preconditioner
+[ 50%] Built target cheap_fft_backend
+[ 75%] Building C object CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o
+[100%] Linking C executable cheap_bench_evidence
+[100%] Built target cheap_bench_evidence

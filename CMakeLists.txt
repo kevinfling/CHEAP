@@ -39,7 +39,7 @@ if(CHEAP_FFT_BACKEND STREQUAL "NOTORIOUS")
     include(FetchContent)
     FetchContent_Declare(notorious_fft
         GIT_REPOSITORY https://github.com/NotoriousLOB/Notorious-FFT.git
-        GIT_TAG 681ae621f51731f84cded6872dcb1f1082105168
+        GIT_TAG a9a48e61eee91ee7182a013c32a4cae0f64f6da3 # v1.1.2
         SOURCE_SUBDIR _cheap_no_cmake)
     FetchContent_GetProperties(notorious_fft)
     if(NOT notorious_fft_POPULATED)

@@ -19,9 +19,13 @@ def check_rows(rows, samples, plans, backend, n):
     assert f'backend={backend} n={n}' in plans
     assert 'DCT-II/REDFT10:' in plans and 'DCT-III/REDFT01:' in plans
     if backend == 'NOTORIOUS':
-        direct = int(bool(n & (n - 1)))
+        # v1.1.2 exposes an algorithm field and uses FFTs at every tested N>=2.
+        # Retain support for validating archived pre-v1.1.2 plan diagnostics.
+        direct = 0 if 'r2r_algo=' in plans else int(bool(n & (n - 1)))
         assert plans.count(f'direct_r2r={direct}') == 2
         assert plans.count(f'fft_present={1-direct}') == 2
+        if 'r2r_algo=' in plans:
+            assert plans.count(f'r2r_algo={3 if n & (n-1) else 2}') == 2
     for row in rows:
         assert row['backend'] == backend and int(row['n']) == n
         assert row['result'] == '0' and row['planner'] == 'FFTW_ESTIMATE'

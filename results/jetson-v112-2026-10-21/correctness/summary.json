@@ -1,0 +1,61 @@
+{
+  "backend": "Notorious-FFT v1.1.2",
+  "commit": "a6f8d0e12920107f89558ab484071f8c6655841d",
+  "ctest": [
+    {
+      "configuration": "Debug",
+      "tests": 14,
+      "passed": 14,
+      "exit_status": 0,
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build-jetson-v112-Debug",
+        "--output-on-failure",
+        "--timeout",
+        "180",
+        "-j2"
+      ],
+      "log": "ctest-Debug.txt"
+    },
+    {
+      "configuration": "Asan",
+      "tests": 14,
+      "passed": 14,
+      "exit_status": 0,
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build-jetson-v112-Asan",
+        "--output-on-failure",
+        "--timeout",
+        "180",
+        "-j2"
+      ],
+      "log": "ctest-Asan.txt"
+    },
+    {
+      "configuration": "Ubsan",
+      "tests": 14,
+      "passed": 14,
+      "exit_status": 0,
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build-jetson-v112-Ubsan",
+        "--output-on-failure",
+        "--timeout",
+        "180",
+        "-j2"
+      ],
+      "log": "ctest-Ubsan.txt"
+    }
+  ],
+  "harness_sanitizers": {
+    "cases": 8,
+    "passed": 8,
+    "log": "harness-Asan.txt",
+    "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+    "UBSAN_OPTIONS": "halt_on_error=1"
+  }
+}

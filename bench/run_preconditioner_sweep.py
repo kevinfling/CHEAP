@@ -5,6 +5,7 @@ import csv
 import gzip
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,36 @@ sys.dont_write_bytecode = True
 from run_pcg_sweep import ROOT, capture, snapshot, utc, write_json
 sys.path.insert(0, str(ROOT / 'tests'))
 from test_bench_preconditioner import check_rows
+
+
+def source_excerpt(header):
+    """Locate definitions by name so a backend update cannot shift excerpts."""
+    lines = header.splitlines()
+    excerpt = []
+    for name in ('notorious_fft_direct_t2t3', 'notorious_fft_dct2', 'notorious_fft_dct3',
+                 'notorious_fft_mkaux_t2t3_1d', 'notorious_fft_execute_r2r'):
+        pattern = re.compile(r'^(?:static\s+)?(?:void|notorious_fft_aux\s*\*)\s*' + name + r'\(')
+        for i, line in enumerate(lines):
+            if not pattern.match(line):
+                continue
+            signature = '\n'.join(lines[i:i+4])
+            if '{' not in signature or ';' in signature.split('{', 1)[0]:
+                continue  # declaration rather than definition
+            balance = 0
+            started = False
+            for j in range(i, min(i+80, len(lines))):
+                excerpt.append(f'{j+1}: {lines[j]}')
+                balance += lines[j].count('{') - lines[j].count('}')
+                started = started or '{' in lines[j]
+                if started and balance == 0:
+                    break
+            else:
+                excerpt.append('[excerpt truncated after 80 lines]')
+            excerpt.append('')
+            break
+        else:
+            raise ValueError(f'backend definition not found: {name}')
+    return '\n'.join(excerpt).rstrip() + '\n'
 
 
 def main():
@@ -55,13 +86,8 @@ def main():
             dependency = build / '_deps/notorious_fft-src'
             builds[backend]['dependency_commit'] = subprocess.check_output(
                 ['git', '-C', str(dependency), 'rev-parse', 'HEAD'], text=True).strip()
-            header = (dependency / 'include/notorious_fft.h').read_text().splitlines()
-            # Preserve source evidence for the measured runtime plan fields.
-            excerpt = []
-            for start, stop in ((4308, 4342), (4386, 4390), (4524, 4531), (5042, 5055), (5661, 5675)):
-                excerpt.extend(f'{i+1}: {header[i]}' for i in range(start-1, stop))
-                excerpt.append('')
-            (out / 'notorious-path.txt').write_text('\n'.join(excerpt) + '\n')
+            header = (dependency / 'include/notorious_fft.h').read_text()
+            (out / 'notorious-path.txt').write_text(source_excerpt(header))
     write_json(out / 'builds.json', builds)
     power = [['sudo', '-n', 'nvpmodel', '-q'], ['sudo', '-n', 'jetson_clocks', '--show']]
     write_json(out / 'power-before.json', {'utc': utc(), 'commands': [capture(c) for c in power]})

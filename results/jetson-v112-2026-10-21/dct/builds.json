@@ -1,0 +1,32 @@
+{
+  "FFTW3": {
+    "binary": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_preconditioner",
+    "binary_sha256": "47f82c13ae432db8cfeaa7242ccecfd3fa8ed4eec41c1e12d42be77782eb25ee",
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"FFTW3\\\" -I/home/damus/Projects/CHEAP/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -c /home/damus/Projects/CHEAP/bench/bench_preconditioner.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_preconditioner.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -o cheap_bench_preconditioner  /usr/lib/aarch64-linux-gnu/libfftw3.so -lm \n"
+  },
+  "NOTORIOUS": {
+    "binary": "/home/damus/Projects/CHEAP/build-jetson-v112-NOTORIOUS/cheap_bench_preconditioner",
+    "binary_sha256": "d134fdb0f3998002ebfa322605986706d96fb4942300dcf9717291c8a233bd9b",
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-v112-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_USE_NOTORIOUS_FFT=1 -isystem /home/damus/Projects/CHEAP/build-jetson-v112-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -std=c99 -o CMakeFiles/cheap_fft_backend.dir/src/cheap_notorious_fft.c.o -c /home/damus/Projects/CHEAP/src/cheap_notorious_fft.c",
+        "file": "/home/damus/Projects/CHEAP/src/cheap_notorious_fft.c"
+      },
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-v112-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"NOTORIOUS\\\" -DCHEAP_USE_NOTORIOUS_FFT=1 -I/home/damus/Projects/CHEAP/include -isystem /home/damus/Projects/CHEAP/build-jetson-v112-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -c /home/damus/Projects/CHEAP/bench/bench_preconditioner.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_preconditioner.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_preconditioner.dir/bench/bench_preconditioner.c.o -o cheap_bench_preconditioner  libcheap_fft_backend.a -lm \n",
+    "dependency_commit": "a6f8d0e12920107f89558ab484071f8c6655841d"
+  }
+}

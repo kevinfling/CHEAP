@@ -1,0 +1,31 @@
+backend=FFTW3 n=513 rho=0.98999999999999999 planner=FFTW_ESTIMATE
+DCT-II/REDFT10: (redft10e-r2hc-513
+  (rdft-ct-dit/9
+    (hc2hc-direct-9/16 "hf_9"
+      (rdft-r2hc-direct-r2c-9 "r2cf_9")
+      (rdft-nop))
+    (rdft-buffered-57-x9/9-5
+      (rdft-vrank>=1-x9/1
+        (rdft-ct-dit/3
+          (hc2hc-direct-3/4 "hf_3"
+            (rdft-r2hc-direct-r2c-3 "r2cf_3")
+            (rdft-nop))
+          (rdft-vrank>=1-x3/1
+            (rdft-generic-r2hc-19))))
+      (rdft-rank0-iter-ci/57-x9)
+      (rdft-nop))))
+DCT-III/REDFT01: (redft01e-r2hc-513
+  (rdft-ct-dit/9
+    (hc2hc-direct-9/16 "hf_9"
+      (rdft-r2hc-direct-r2c-9 "r2cf_9")
+      (rdft-nop))
+    (rdft-buffered-57-x9/9-5
+      (rdft-vrank>=1-x9/1
+        (rdft-ct-dit/3
+          (hc2hc-direct-3/4 "hf_3"
+            (rdft-r2hc-direct-r2c-3 "r2cf_3")
+            (rdft-nop))
+          (rdft-vrank>=1-x3/1
+            (rdft-generic-r2hc-19))))
+      (rdft-rank0-iter-ci/57-x9)
+      (rdft-nop))))
