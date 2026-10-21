@@ -1,5 +1,6 @@
 # CHEAP
 
+> **Operation and accuracy disclosure:** A DCT-diagonal application is a **surrogate apply**, not a solve of a generic Toeplitz system. Exact Toeplitz FFT matvec evaluates the original finite Toeplitz operator but is not itself a solve. Residual-controlled PCG solves the original SPD system only when its reported fresh true residual meets the requested tolerance. PSD-validated circulant draws are covariance-faithful only for an accepted embedding (within the documented eigenvalue tolerance). Positive DCT weights and a small surrogate residual do **not** imply a small residual on the original operator. See [benchmark protocol](BENCH.md#matched-accuracy-evidence-protocol).\n\n
 **Circulant Hessian Efficient Algorithm Package:** a header-only C99 library for O(N log N) spectral algorithms on structured covariance matrices. Supports 1D, 2D, and 3D grids via separable DCT diagonalization.
 
 CHEAP organizes structured numerical methods around a reusable DCT-II spectral primitive. DCT-diagonal operators are applied exactly in their chosen transform algebra; generic Toeplitz matrices and finite-grid fractional Brownian covariance matrices are **not** exactly DCT-diagonal. For those problems, DCT spectra are approximations or preconditioners, and accuracy must be checked against the original operator.
@@ -324,3 +325,14 @@ See [CHEAP.md](CHEAP.md) for the full mathematical framework, proofs, and an hon
 ## License
 
 [MIT](LICENSE)
+
+## Numerical operation cost (not interchangeable)
+
+| Operation | Leading work after setup | Accuracy condition |
+|---|---|---|
+| DCT surrogate apply | O(n log n) | Exact for the defined surrogate only |
+| Exact Toeplitz FFT matvec | O(L log L), L >= 2n-1 | Finite Toeplitz matvec; not a solve |
+| Residual-controlled PCG | k × O(L log L), plus preconditioner | True ||b-Ax|| must meet atol+rtol||b|| |
+| PSD circulant draw | O(L log L) | Accepted nonnegative embedding spectrum |
+
+Setup includes FFT planning, allocations and cached spectra. The iteration count k and the embedding size L depend on the workload. The rows are not interchangeable speedups.
