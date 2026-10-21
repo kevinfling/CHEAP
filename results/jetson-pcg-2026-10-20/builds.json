@@ -1,0 +1,32 @@
+{
+  "FFTW3": {
+    "binary": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3/cheap_bench_evidence",
+    "binary_sha256": "36066ce3c1f7f5b1cdbab701daf7bf33a248912a257cefa27f62a27708c67f5e",
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-FFTW3",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"FFTW3\\\" -I/home/damus/Projects/CHEAP/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -c /home/damus/Projects/CHEAP/bench/bench_matched.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_matched.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -o cheap_bench_evidence  /usr/lib/aarch64-linux-gnu/libfftw3.so -lm \n"
+  },
+  "NOTORIOUS": {
+    "binary": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/cheap_bench_evidence",
+    "binary_sha256": "39e2c0976695baeee06cf8123aa2e7eec487dd75ffe2bb120893bd9b45b7e549",
+    "compile_commands": [
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_USE_NOTORIOUS_FFT=1 -isystem /home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -std=c99 -o CMakeFiles/cheap_fft_backend.dir/src/cheap_notorious_fft.c.o -c /home/damus/Projects/CHEAP/src/cheap_notorious_fft.c",
+        "file": "/home/damus/Projects/CHEAP/src/cheap_notorious_fft.c"
+      },
+      {
+        "directory": "/home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS",
+        "command": "/usr/bin/gcc -DCHEAP_BENCH_BACKEND=\\\"NOTORIOUS\\\" -DCHEAP_USE_NOTORIOUS_FFT=1 -I/home/damus/Projects/CHEAP/include -isystem /home/damus/Projects/CHEAP/build-jetson-gcc-NOTORIOUS/_deps/notorious_fft-src/include -march=native -O3 -DNDEBUG -Wall -Wextra -pedantic -march=native -std=c99 -o CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -c /home/damus/Projects/CHEAP/bench/bench_matched.c",
+        "file": "/home/damus/Projects/CHEAP/bench/bench_matched.c"
+      }
+    ],
+    "link_command": "/usr/bin/gcc -march=native -O3 -DNDEBUG CMakeFiles/cheap_bench_evidence.dir/bench/bench_matched.c.o -o cheap_bench_evidence  libcheap_fft_backend.a -lm \n",
+    "dependency_commit": "681ae621f51731f84cded6872dcb1f1082105168"
+  }
+}

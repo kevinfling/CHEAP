@@ -102,3 +102,32 @@ The prepared board stayed in 15 W mode with recorded CPU clocks at 1.4976 GHz.
 The actual build used Unix Makefiles because Ninja was unavailable, and explicitly
 selected GCC 11.4.0 for both backends. See the report for exact reproduction
 commands, residual-field interpretation and covariance-check limitations.
+
+
+## Follow-up: stronger-correlation DCT preconditioning
+
+The [paired solver report](results/jetson-pcg-2026-10-20/README.md) compares
+unpreconditioned CG with the existing DCT-preconditioned PCG implementation at
+rho=0.3, 0.9 and 0.99 for both backends and the same six sizes. Only the harness
+was expanded; no numerical library algorithms were modified. All 2,952 solves
+passed the same true-residual target and an independent original-system check.
+
+At N=4096, rho=0.99, FFTW3 went from 854 iterations / 193.027 ms to
+6 iterations / 2.636 ms. Notorious went from 853 iterations / 217.380 ms to
+6 iterations / 2.941 ms. Notorious's N=17 and N=257 DCT-PCG cases were slower
+despite lower iteration counts; those measurements are retained in the report.
+
+Rebuild both evidence binaries, then run sequentially into a fresh directory:
+
+```sh
+python3 bench/run_pcg_sweep.py --output results/jetson-pcg-repeat
+```
+
+The runner defaults to the `build-jetson-gcc-FFTW3` and
+`build-jetson-gcc-NOTORIOUS` binaries used on this Jetson. Override them with
+`--fftw` and `--notorious` if using the build directories above. It captures
+platform/build/source provenance, power/clock queries, per-process snapshots,
+exit status, raw per-solve data and validated summaries. Use `pcg` mode for an
+individual pair (for example, `cheap_bench_evidence 257 0.99 pcg samples.csv`);
+the optional log records every first and steady solve. See [BENCH.md](BENCH.md)
+for CLI and CSV field definitions.

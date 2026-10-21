@@ -6,17 +6,69 @@
 
 The historical measurements below are retained as **legacy, non-matched-accuracy observations**. They do not establish a speedup for solving the original Toeplitz system. Do not compare a single DCT surrogate apply to a dense solve as if both solved the same mathematical problem.
 
-The opt-in `cheap_bench_evidence` harness currently measures setup, first execution, and 40 warm steady-state timings for an original Toeplitz FFT matvec, original-system unpreconditioned PCG, and PSD circulant draw. Its CSV is **preliminary timing instrumentation**, not a final matched-accuracy comparison: it lacks structure-aware comparator implementations and full empirical covariance recovery. It checks matvec against a dense oracle at N<=1024 and checks two covariance entries using 12,000 seeded Gaussian draws. Timed sampler calls repeat fixed input and exclude RNG. Peak memory is process high-water RSS, not incremental per-operation memory.
+The opt-in `cheap_bench_evidence` harness measures setup, first execution, and 40 warm steady-state timings for an original Toeplitz FFT matvec, unpreconditioned CG, DCT-preconditioned PCG on that same original operator, and a PSD circulant draw. Its `pcg` mode compares the two solvers at the same true-residual target, with independent AR(1) residual verification after every solve. This remains a preliminary comparison of those two solver paths: structure-specific direct baselines and other problem/RHS families are not measured. The full mode also checks matvec against a dense oracle at N<=1024 and checks two covariance entries using 12,000 seeded Gaussian draws; full empirical covariance recovery remains missing. Timed sampler calls repeat fixed input and exclude RNG. Peak memory is process high-water RSS, not incremental per-operation memory.
 
 The [2026-10-20 Jetson size sweep](results/jetson-2026-10-20/README.md) records both backends at N=17, 64, 257, 512, 1024 and 4096, including raw CSVs, accuracy checks, platform/build provenance and separate sanitizer validation. All twelve runs succeeded. FFTW3 had lower medians for all three operations at every size in that session; the results do not establish a dense/FFT crossover or a preconditioning speedup.
+
+### Stronger-correlation CG/DCT-PCG experiment
+
+The [2026-10-20 paired solver sweep](results/jetson-pcg-2026-10-20/README.md)
+repeats the six sizes for rho=0.3, 0.9 and 0.99, using both FFT backends.
+All 36 processes and 2,952 individually logged solves passed the common stopping
+target and an independent original-system residual check. At N=4096, rho=0.99,
+FFTW3's median solve time fell from 193.027 ms (854 iterations) to 2.636 ms
+(6 iterations); Notorious's fell from 217.380 ms (853 iterations) to 2.941 ms
+(6 iterations). Notorious DCT-PCG was slower at N=17 and N=257 despite fewer
+iterations. The report includes those cases and separates common setup,
+preconditioner setup, first calls and warm solves.
+
+The numerical library is unchanged. The benchmark uses the existing
+`cheap_init_from_toeplitz_projection` and PCG preconditioner adapter; its local
+planner wrapper selects `FFTW_ESTIMATE` for DCT plans as well as FFT plans.
+
+```sh
+# Existing one-argument invocation remains supported; defaults: 257 0.3 all.
+# all: matvec, CG, DCT-PCG and sampler; pcg: just the two original-system solvers.
+./build-evidence-fftw/cheap_bench_evidence 257 0.99 pcg /tmp/solve-samples.csv
+python3 tests/test_bench_evidence.py \
+  build-evidence-fftw/cheap_bench_evidence \
+  build-evidence-notorious/cheap_bench_evidence
+python3 bench/run_pcg_sweep.py --output results/pcg-repeat \
+  --fftw build-evidence-fftw/cheap_bench_evidence \
+  --notorious build-evidence-notorious/cheap_bench_evidence
+```
+
+CLI: `[n [rho [all|pcg [solve_samples.csv]]]]`, with `2 <= n <= 65536` and
+finite `0 <= rho < 1`. Both solvers start from zero, use
+`atol=1e-10`, `rtol=1e-8`, and check the original Toeplitz equation.
+The preconditioner is the inverse Frobenius-optimal DCT-II diagonal, not the
+legacy DCT of the first column. The optional solve log contains every first and
+steady call, including failures. Argument/setup/output errors and rejected
+embeddings also produce a nonzero process exit; the runner retains failures.
+Strong-rho sampler embeddings can be rejected at small N, so use `pcg` mode for
+this experiment.
+
+The original 18 summary CSV columns are retained; additional columns expose
+rho, absolute tolerance, common and preconditioner setup, first relative and
+independently checked relative residuals, maximum residuals over all 41 calls,
+last-call operator/preconditioner counts, residual validity, first solver status,
+failed-solve count, iteration range, padded FFT length and planner.
+`setup_ms = common_setup_ms + preconditioner_setup_ms` for the solver rows.
+The legacy `true_residual` field is the first solve's absolute norm; new relative
+fields are explicitly named. The legacy `backend` field labels the operation
+path; `configured_backend` identifies FFTW3 versus Notorious.
+`max_relative_residual` and `max_independent_relative_residual` cover all calls;
+last-call counts accompany the legacy last-call `iterations` field.
+The sampler's two-entry covariance threshold (0.12) and matvec oracle threshold
+(`1e-10`) differ from the CSV's generic solver relative tolerance (`1e-8`).
 
 ### Reproduction commands (Linux, C99, release)
 
 ```sh
-cmake -S . -B build-evidence-fftw -G Ninja -DCMAKE_BUILD_TYPE=Release -DCHEAP_FFT_BACKEND=FFTW3 -DCHEAP_BUILD_EVIDENCE_BENCH=ON
+cmake -S . -B build-evidence-fftw -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS=-march=native -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DCHEAP_FFT_BACKEND=FFTW3 -DCHEAP_BUILD_EVIDENCE_BENCH=ON
 cmake --build build-evidence-fftw --target cheap_bench_evidence
 ./build-evidence-fftw/cheap_bench_evidence 257 > evidence-fftw-257.csv
-cmake -S . -B build-evidence-notorious -G Ninja -DCMAKE_BUILD_TYPE=Release -DCHEAP_FFT_BACKEND=NOTORIOUS -DCHEAP_BUILD_EVIDENCE_BENCH=ON
+cmake -S . -B build-evidence-notorious -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS=-march=native -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DCHEAP_FFT_BACKEND=NOTORIOUS -DCHEAP_BUILD_EVIDENCE_BENCH=ON
 cmake --build build-evidence-notorious --target cheap_bench_evidence
 ./build-evidence-notorious/cheap_bench_evidence 257 > evidence-notorious-257.csv
 ```
