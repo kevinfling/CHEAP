@@ -24,10 +24,7 @@ explicit `cheap_circulant_sampler_init_approx_clip` variant allows
 material clipping and marks `CHEAP_EMBED_APPROX_CLIP`. Do not call
 those samples exact.
 
-A larger embedding length can sometimes eliminate negative eigenvalues,
-but no automatic escalation is implemented in this cut. Supply an
-explicit power-of-two L to test another embedding. Not all stationary
-covariances have a PSD embedding at useful finite lengths.
+The bounded `cheap_circulant_sampler_init_search` API tries powers of two\nup to a caller-supplied maximum and records the last tested L on\nrejection. **Important:** for this fixed-lag *zero-padded* construction,\ndoubling L retains all old Fourier frequencies. A materially negative\neigenvalue therefore cannot be repaired merely by zero-padding to a\nlarger power of two. Genuine embedding-size repair requires constructing\nadditional covariance lags (a different embedding), which this API does\nnot attempt. Not all stationary covariances have a PSD embedding at\nuseful finite lengths.
 
 ## Transform convention and normal input
 
