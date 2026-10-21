@@ -316,3 +316,11 @@ if(CHEAP_BUILD_CPP)
         target_compile_definitions(${example}_cpp PRIVATE _POSIX_C_SOURCE=199309L)
     endforeach()
 endif()
+
+# Opt-in evidence harness; not part of correctness CTest timing.
+option(CHEAP_BUILD_EVIDENCE_BENCH "Build matched-accuracy evidence harness" OFF)
+if(CHEAP_BUILD_EVIDENCE_BENCH)
+    add_executable(cheap_bench_evidence bench/bench_matched.c)
+    target_link_libraries(cheap_bench_evidence PRIVATE cheap)
+    target_compile_definitions(cheap_bench_evidence PRIVATE CHEAP_BENCH_BACKEND="${CHEAP_FFT_BACKEND}")
+endif()
